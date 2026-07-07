@@ -16,10 +16,10 @@ if (!API_KEY) {
   process.exit(1);
 }
 
+const MODEL = "gemini-2.5-flash";
+
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/" +
-  "gemini-2.5-flash:generateContent?key=" +
-  API_KEY;
+  `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 
 // ======================================================
@@ -56,8 +56,9 @@ async function callGeminiWithRetry(
         method: "POST",
 
         headers: {
-          "Content-Type": "application/json",
-        },
+  "Content-Type": "application/json",
+  "x-goog-api-key": API_KEY,
+},
 
         body: JSON.stringify(requestBody),
       }
