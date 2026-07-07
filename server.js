@@ -186,216 +186,123 @@ app.post(
       // FUTUREPATH AI PROMPT
       // ==================================================
 
-      const prompt = `
-You are FuturePath AI.
+    
+const prompt = `
+You are FuturePath AI, an expert AI career guidance assistant.
 
-You are an expert AI career guidance and career
-recommendation system designed for students.
+Analyze the student's profile, technical skills,
+soft skills, interests, education, and career assessment.
 
-Your responsibility is to carefully analyze a student's:
-
-- Education
-- Degree
-- Department
-- Year of study
-- Career interests
-- Technical skills
-- Technical skill levels
-- Soft skills
-- Career assessment answers
-- Problem-solving ability
-- Technical interests
-- Career potential
-
-The student information is provided below.
-
-
-STUDENT PROFILE:
-
+Student Profile:
 ${JSON.stringify(profile, null, 2)}
 
+Technical Skills:
+${JSON.stringify(technicalSkills, null, 2)}
 
-TECHNICAL SKILLS:
+Soft Skills:
+${JSON.stringify(softSkills, null, 2)}
 
-${JSON.stringify(
-  technicalSkills || {},
-  null,
-  2
-)}
+Career Assessment:
+${JSON.stringify(assessment, null, 2)}
 
+IMPORTANT CAREER ANALYSIS RULES:
 
-SOFT SKILLS:
+Return exactly 3 career matches.
 
-${JSON.stringify(
-  softSkills || [],
-  null,
-  2
-)}
+Each career match MUST contain its own skillsToImprove
+and recommendedSkills.
 
+The skills must be specifically related to that career.
 
-CAREER ASSESSMENT:
+Do not create global skillGaps.
 
-${JSON.stringify(
-  assessment || {},
-  null,
-  2
-)}
+Do not create global recommendedSkills.
 
+For example:
 
-==================================================
+If the career is Python Developer,
+skillsToImprove must contain skills specifically required
+for becoming a Python Developer.
 
-ANALYSIS INSTRUCTIONS
+If the career is Cloud Architect,
+skillsToImprove must contain skills specifically required
+for Cloud Architecture.
 
-==================================================
+If the career is AI Engineer,
+skillsToImprove must contain skills specifically required
+for Artificial Intelligence and Machine Learning.
 
-1. Analyze the student's education.
+The matchPercentage must be calculated based on the student's
+actual profile, current skills, interests, and assessment.
 
-2. Analyze the student's department and academic
-   background.
+Do not use the same skills for every career.
 
-3. Analyze the student's career interests.
+Return ONLY valid JSON.
 
-4. Analyze every technical skill.
-
-5. Consider the skill level:
-   Beginner,
-   Intermediate,
-   Advanced.
-
-6. Analyze the student's soft skills.
-
-7. Analyze all career assessment answers.
-
-8. Compare the student's current skills with
-   real career requirements.
-
-9. Recommend exactly 3 realistic career paths.
-
-10. The careers must be relevant to the student's
-    actual profile.
-
-11. Give every career a match percentage from
-    0 to 100.
-
-12. Do not give every career an unrealistically
-    high percentage.
-
-13. The first career must be the strongest match.
-
-14. Career matches must be ordered from highest
-    percentage to lowest percentage.
-
-15. Explain clearly why every career matches
-    the student.
-
-16. Identify the student's current strengths.
-
-17. Identify missing or weak career skills.
-
-18. Do not list an existing student skill as a
-    missing skill.
-
-19. Recommend useful skills to learn next.
-
-20. Recommended skills must support the suggested
-    career paths.
-
-21. Create a practical six-month learning roadmap.
-
-22. The roadmap must consider the student's
-    existing skill level.
-
-23. Do not claim the student has skills that are
-    not provided in the student data.
-
-24. Do not invent education information.
-
-25. Do not invent assessment answers.
-
-26. Return ONLY valid JSON.
-
-27. Do not return markdown.
-
-28. Do not use JSON code fences.
-
-29. Do not write text before the JSON.
-
-30. Do not write text after the JSON.
-
-
-==================================================
-
-RETURN EXACTLY THIS JSON STRUCTURE
-
-==================================================
+Use exactly this JSON structure:
 
 {
   "careerMatches": [
     {
       "career": "Career Name",
       "matchPercentage": 90,
-      "reason": "Clear reason explaining the career match"
+      "reason": "Explain why this career matches the student",
+      "skillsToImprove": [
+        "Career specific skill 1",
+        "Career specific skill 2",
+        "Career specific skill 3",
+        "Career specific skill 4"
+      ],
+      "recommendedSkills": [
+        "Recommended skill 1",
+        "Recommended skill 2",
+        "Recommended skill 3",
+        "Recommended skill 4"
+      ]
+    },
+    {
+      "career": "Career Name",
+      "matchPercentage": 85,
+      "reason": "Explain why this career matches the student",
+      "skillsToImprove": [
+        "Career specific skill 1",
+        "Career specific skill 2",
+        "Career specific skill 3",
+        "Career specific skill 4"
+      ],
+      "recommendedSkills": [
+        "Recommended skill 1",
+        "Recommended skill 2",
+        "Recommended skill 3",
+        "Recommended skill 4"
+      ]
     },
     {
       "career": "Career Name",
       "matchPercentage": 80,
-      "reason": "Clear reason explaining the career match"
-    },
-    {
-      "career": "Career Name",
-      "matchPercentage": 70,
-      "reason": "Clear reason explaining the career match"
+      "reason": "Explain why this career matches the student",
+      "skillsToImprove": [
+        "Career specific skill 1",
+        "Career specific skill 2",
+        "Career specific skill 3",
+        "Career specific skill 4"
+      ],
+      "recommendedSkills": [
+        "Recommended skill 1",
+        "Recommended skill 2",
+        "Recommended skill 3",
+        "Recommended skill 4"
+      ]
     }
   ],
   "strengths": [
-    "Strength 1",
-    "Strength 2",
-    "Strength 3"
+    "Student strength 1",
+    "Student strength 2",
+    "Student strength 3"
   ],
-  "skillGaps": [
-    "Skill gap 1",
-    "Skill gap 2",
-    "Skill gap 3"
-  ],
-  "recommendedSkills": [
-    "Skill 1",
-    "Skill 2",
-    "Skill 3",
-    "Skill 4"
-  ],
-  "careerSummary": "Detailed career analysis summary",
-  "roadmap": [
-    {
-      "stage": "Foundation",
-      "duration": "1-2 months",
-      "focus": [
-        "Learning goal 1",
-        "Learning goal 2",
-        "Learning goal 3"
-      ]
-    },
-    {
-      "stage": "Intermediate",
-      "duration": "3-4 months",
-      "focus": [
-        "Learning goal 1",
-        "Learning goal 2",
-        "Learning goal 3"
-      ]
-    },
-    {
-      "stage": "Career Ready",
-      "duration": "5-6 months",
-      "focus": [
-        "Learning goal 1",
-        "Learning goal 2",
-        "Learning goal 3"
-      ]
-    }
-  ]
+  "careerSummary": "Short personalized career summary"
 }
 `;
-
 
       // ==================================================
       // GEMINI REQUEST BODY
