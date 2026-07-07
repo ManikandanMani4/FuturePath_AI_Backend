@@ -56,9 +56,9 @@ async function callGeminiWithRetry(
         method: "POST",
 
         headers: {
-  "Content-Type": "application/json",
-  "x-goog-api-key": API_KEY,
-},
+          "Content-Type": "application/json",
+          "x-goog-api-key": API_KEY,
+        },
 
         body: JSON.stringify(requestBody),
       }
@@ -74,11 +74,6 @@ async function callGeminiWithRetry(
       return data;
     }
 
-
-    // ==================================================
-    // RETRY TEMPORARY GEMINI ERRORS
-    // ==================================================
-
     if (
       (
         response.status === 503 ||
@@ -90,26 +85,17 @@ async function callGeminiWithRetry(
         Math.pow(2, attempt) * 2000;
 
       console.log(
-        `Gemini temporarily unavailable.`
+        "Gemini temporarily unavailable."
       );
 
       console.log(
         `Waiting ${waitTime / 1000} seconds...`
       );
 
-      console.log(
-        `Retry ${attempt + 1}/${maxRetries}`
-      );
-
       await wait(waitTime);
 
       continue;
     }
-
-
-    // ==================================================
-    // GEMINI ERROR
-    // ==================================================
 
     console.error(
       "GEMINI API ERROR:",
@@ -122,7 +108,6 @@ async function callGeminiWithRetry(
     );
 
     error.status = response.status;
-
     error.details = data;
 
     throw error;
@@ -167,11 +152,6 @@ app.post(
         assessment,
       } = req.body;
 
-
-      // ==================================================
-      // VALIDATION
-      // ==================================================
-
       if (!profile) {
         return res.status(400).json({
           success: false,
@@ -186,35 +166,36 @@ app.post(
       // FUTUREPATH AI PROMPT
       // ==================================================
 
-    
-const prompt = `
+      const prompt = `
 You are FuturePath AI, an expert AI career guidance assistant.
 
-Analyze the student's profile, technical skills,
-soft skills, interests, education, and career assessment.
+Analyze the student's complete profile and generate
+personalized career recommendations.
 
-Student Profile:
+STUDENT PROFILE:
 ${JSON.stringify(profile, null, 2)}
 
-Technical Skills:
+TECHNICAL SKILLS:
 ${JSON.stringify(technicalSkills, null, 2)}
 
-Soft Skills:
+SOFT SKILLS:
 ${JSON.stringify(softSkills, null, 2)}
 
-Career Assessment:
+CAREER ASSESSMENT:
 ${JSON.stringify(assessment, null, 2)}
+
 
 CAREER MATCHING RULES:
 
-Return exactly 3 career matches.
+Return exactly 5 career matches.
 
-Analyze the student's complete profile including:
+Analyze:
 - education
 - degree
 - department
 - interests
 - technical skills
+- technical skill proficiency
 - soft skills
 - career goal
 - assessment answers
@@ -223,47 +204,139 @@ Analyze the student's complete profile including:
 - creativity
 - leadership interest
 
-Do not limit career recommendations to software development,
-AI, machine learning, cloud computing, or DevOps.
+Generate career recommendations dynamically from the
+student's actual profile.
 
-Do not use fixed or predefined career names.
+Do not use fixed career recommendations.
 
-Generate career matches dynamically based only on the
-student's actual profile and assessment data.
+Do not always recommend:
+- Software Developer
+- DevOps Engineer
+- AI/ML Engineer
 
-The 3 careers should represent the strongest career matches
-for the individual student.
+Recommend these careers only when the student's profile
+strongly matches the career.
 
-Different students with different profiles should receive
-different career recommendations.
+The five careers must be meaningfully different career paths.
 
-For example, possible career domains may include technology,
-design, management, business, research, analytics,
-cybersecurity, product management, consulting, education,
-entrepreneurship, or other relevant professional fields.
+Do not return careers that are only renamed versions
+of the same role.
 
-These domains are examples only.
-Do not automatically select careers from this list.
+For example:
 
-Each career match MUST contain its own skillsToImprove
-and recommendedSkills.
+Software Developer,
+Software Engineer,
+Application Developer,
+and Backend Software Developer
 
-skillsToImprove must describe skills the student currently
-needs to strengthen specifically for that career.
+must not all appear in the same career analysis.
 
-recommendedSkills must contain useful skills the student
-should learn specifically for that career.
+Different student profiles should receive different
+career recommendations.
+
+
+MATCH PERCENTAGE RULES:
+
+Calculate matchPercentage independently for every career.
+
+The match percentage must be based on:
+- technical skill match
+- technical skill proficiency
+- interest match
+- education match
+- assessment match
+- soft skill match
+
+Do not use fixed percentages.
+
+Do not automatically return:
+95, 90, 85, 80, 75.
+
+Use the student's actual data.
+
+A student with stronger relevant skills should receive
+a higher match percentage.
+
+If the student's relevant skill proficiency improves,
+the career match percentage should increase when the
+career is analyzed again.
+
+The percentage must be an integer from 0 to 100.
+
+
+SKILLS TO IMPROVE RULES:
+
+Each career must contain its own skillsToImprove.
+
+Return 3 to 5 skills.
+
+skillsToImprove should contain relevant skills the student
+needs to strengthen for that specific career.
+
+Prioritize relevant skills currently marked as Beginner
+or Intermediate.
+
+If an essential career foundation skill is missing,
+it may also be included.
+
+Return only clear skill names.
+
+Do not return long sentences.
+
+Do not return unrelated skills.
+
+
+RECOMMENDED SKILLS RULES:
+
+Each career must contain its own recommendedSkills.
+
+Return 4 to 6 skills.
+
+recommendedSkills should contain new skills the student
+should learn next for that specific career.
+
+Recommend practical and industry-relevant:
+- technologies
+- frameworks
+- tools
+- platforms
+- methods
+- professional skills
+
+Do not repeat skills from skillsToImprove.
+
+Do not use generic recommendations such as:
+- Improve Coding
+- Learn Technology
+- Technical Skills
+
+Return clear and searchable skill names.
+
+The application uses these skill names to search
+learning platforms.
+
+
+CAREER-SPECIFIC SKILL RULE:
+
+Each career must have different career-specific
+skillsToImprove and recommendedSkills.
 
 Do not create global skillGaps.
 
 Do not create global recommendedSkills.
 
-Do not use the same skills for all career matches.
+Do not create a global roadmap.
 
-Calculate matchPercentage independently for each career
-using the student's actual profile and assessment.
+
+OUTPUT RULES:
 
 Return ONLY valid JSON.
+
+Do not return markdown.
+
+Do not return code fences.
+
+Do not include text before or after the JSON.
 
 Use exactly this JSON structure:
 
@@ -271,64 +344,33 @@ Use exactly this JSON structure:
   "careerMatches": [
     {
       "career": "Career Name",
-      "matchPercentage": 90,
-      "reason": "Explain why this career matches the student",
+      "matchPercentage": 0,
+      "reason": "Short personalized reason",
       "skillsToImprove": [
-        "Career specific skill 1",
-        "Career specific skill 2",
-        "Career specific skill 3",
-        "Career specific skill 4"
+        "Skill 1",
+        "Skill 2",
+        "Skill 3"
       ],
       "recommendedSkills": [
-        "Recommended skill 1",
-        "Recommended skill 2",
-        "Recommended skill 3",
-        "Recommended skill 4"
-      ]
-    },
-    {
-      "career": "Career Name",
-      "matchPercentage": 85,
-      "reason": "Explain why this career matches the student",
-      "skillsToImprove": [
-        "Career specific skill 1",
-        "Career specific skill 2",
-        "Career specific skill 3",
-        "Career specific skill 4"
-      ],
-      "recommendedSkills": [
-        "Recommended skill 1",
-        "Recommended skill 2",
-        "Recommended skill 3",
-        "Recommended skill 4"
-      ]
-    },
-    {
-      "career": "Career Name",
-      "matchPercentage": 80,
-      "reason": "Explain why this career matches the student",
-      "skillsToImprove": [
-        "Career specific skill 1",
-        "Career specific skill 2",
-        "Career specific skill 3",
-        "Career specific skill 4"
-      ],
-      "recommendedSkills": [
-        "Recommended skill 1",
-        "Recommended skill 2",
-        "Recommended skill 3",
-        "Recommended skill 4"
+        "New Skill 1",
+        "New Skill 2",
+        "New Skill 3",
+        "New Skill 4"
       ]
     }
   ],
   "strengths": [
-    "Student strength 1",
-    "Student strength 2",
-    "Student strength 3"
+    "Strength 1",
+    "Strength 2",
+    "Strength 3"
   ],
-  "careerSummary": "Short personalized career summary"
+  "careerSummary":
+    "Short personalized career summary"
 }
+
+The careerMatches array MUST contain exactly 5 objects.
 `;
+
 
       // ==================================================
       // GEMINI REQUEST BODY
@@ -361,7 +403,7 @@ Use exactly this JSON structure:
 
 
       // ==================================================
-      // CALL GEMINI WITH RETRY
+      // CALL GEMINI
       // ==================================================
 
       const geminiData =
@@ -372,7 +414,7 @@ Use exactly this JSON structure:
 
 
       // ==================================================
-      // GET GEMINI TEXT
+      // GET GEMINI RESPONSE
       // ==================================================
 
       const responseText =
@@ -380,7 +422,6 @@ Use exactly this JSON structure:
           ?.candidates?.[0]
           ?.content?.parts?.[0]
           ?.text;
-
 
       if (!responseText) {
         console.error(
@@ -397,14 +438,13 @@ Use exactly this JSON structure:
         );
       }
 
-
       console.log(
         "Gemini career analysis generated"
       );
 
 
       // ==================================================
-      // CONVERT AI RESPONSE TO JSON
+      // CONVERT RESPONSE TO JSON
       // ==================================================
 
       let analysis;
@@ -418,7 +458,9 @@ Use exactly this JSON structure:
           "INVALID GEMINI JSON:"
         );
 
-        console.error(responseText);
+        console.error(
+          responseText
+        );
 
         throw new Error(
           "Gemini returned invalid JSON"
@@ -427,20 +469,81 @@ Use exactly this JSON structure:
 
 
       // ==================================================
-      // BASIC AI RESPONSE VALIDATION
+      // CAREER MATCH VALIDATION
       // ==================================================
 
       if (
         !Array.isArray(
           analysis.careerMatches
         ) ||
-        analysis.careerMatches.length !== 3
+        analysis.careerMatches.length !== 5
       ) {
         throw new Error(
-          "Gemini did not return exactly 3 career matches"
+          "Gemini did not return exactly 5 career matches"
         );
       }
 
+
+      // ==================================================
+      // VALIDATE EVERY CAREER
+      // ==================================================
+
+      for (
+        const career of analysis.careerMatches
+      ) {
+        if (
+          !career.career ||
+          typeof career.career !== "string"
+        ) {
+          throw new Error(
+            "Invalid career name"
+          );
+        }
+
+        if (
+          typeof career.matchPercentage !==
+          "number"
+        ) {
+          throw new Error(
+            `Invalid match percentage for ${career.career}`
+          );
+        }
+
+        career.matchPercentage = Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              career.matchPercentage
+            )
+          )
+        );
+
+        if (
+          !Array.isArray(
+            career.skillsToImprove
+          )
+        ) {
+          throw new Error(
+            `Invalid skillsToImprove for ${career.career}`
+          );
+        }
+
+        if (
+          !Array.isArray(
+            career.recommendedSkills
+          )
+        ) {
+          throw new Error(
+            `Invalid recommendedSkills for ${career.career}`
+          );
+        }
+      }
+
+
+      // ==================================================
+      // STRENGTH VALIDATION
+      // ==================================================
 
       if (
         !Array.isArray(
@@ -453,41 +556,8 @@ Use exactly this JSON structure:
       }
 
 
-      if (
-        !Array.isArray(
-          analysis.skillGaps
-        )
-      ) {
-        throw new Error(
-          "Invalid skill gaps data"
-        );
-      }
-
-
-      if (
-        !Array.isArray(
-          analysis.recommendedSkills
-        )
-      ) {
-        throw new Error(
-          "Invalid recommended skills data"
-        );
-      }
-
-
-      if (
-        !Array.isArray(
-          analysis.roadmap
-        )
-      ) {
-        throw new Error(
-          "Invalid roadmap data"
-        );
-      }
-
-
       // ==================================================
-      // SORT CAREER MATCHES
+      // SORT CAREERS BY MATCH
       // ==================================================
 
       analysis.careerMatches.sort(
@@ -512,16 +582,10 @@ Use exactly this JSON structure:
       });
 
     } catch (error) {
-
-      // ==================================================
-      // ERROR LOG
-      // ==================================================
-
       console.error(
         "AI ANALYSIS ERROR:",
         error.message
       );
-
 
       if (error.details) {
         console.error(
@@ -533,14 +597,7 @@ Use exactly this JSON structure:
         );
       }
 
-
-      // ==================================================
-      // TEMPORARY GEMINI ERROR
-      // ==================================================
-
-      if (
-        error.status === 503
-      ) {
+      if (error.status === 503) {
         return res.status(503).json({
           success: false,
 
@@ -552,14 +609,7 @@ Use exactly this JSON structure:
         });
       }
 
-
-      // ==================================================
-      // GEMINI RATE LIMIT
-      // ==================================================
-
-      if (
-        error.status === 429
-      ) {
+      if (error.status === 429) {
         return res.status(429).json({
           success: false,
 
@@ -570,11 +620,6 @@ Use exactly this JSON structure:
             "Please wait before trying the AI analysis again.",
         });
       }
-
-
-      // ==================================================
-      // GENERAL ERROR
-      // ==================================================
 
       return res.status(
         error.status || 500
@@ -600,7 +645,8 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
 
-    error: "API route not found",
+    error:
+      "API route not found",
   });
 });
 
@@ -629,7 +675,7 @@ app.listen(
     );
 
     console.log(
-      "Gemini Model: gemini-2.5-flash"
+      `Gemini Model: ${MODEL}`
     );
 
     console.log(
