@@ -205,37 +205,63 @@ ${JSON.stringify(softSkills, null, 2)}
 Career Assessment:
 ${JSON.stringify(assessment, null, 2)}
 
-IMPORTANT CAREER ANALYSIS RULES:
+CAREER MATCHING RULES:
 
 Return exactly 3 career matches.
+
+Analyze the student's complete profile including:
+- education
+- degree
+- department
+- interests
+- technical skills
+- soft skills
+- career goal
+- assessment answers
+- strengths
+- problem solving ability
+- creativity
+- leadership interest
+
+Do not limit career recommendations to software development,
+AI, machine learning, cloud computing, or DevOps.
+
+Do not use fixed or predefined career names.
+
+Generate career matches dynamically based only on the
+student's actual profile and assessment data.
+
+The 3 careers should represent the strongest career matches
+for the individual student.
+
+Different students with different profiles should receive
+different career recommendations.
+
+For example, possible career domains may include technology,
+design, management, business, research, analytics,
+cybersecurity, product management, consulting, education,
+entrepreneurship, or other relevant professional fields.
+
+These domains are examples only.
+Do not automatically select careers from this list.
 
 Each career match MUST contain its own skillsToImprove
 and recommendedSkills.
 
-The skills must be specifically related to that career.
+skillsToImprove must describe skills the student currently
+needs to strengthen specifically for that career.
+
+recommendedSkills must contain useful skills the student
+should learn specifically for that career.
 
 Do not create global skillGaps.
 
 Do not create global recommendedSkills.
 
-For example:
+Do not use the same skills for all career matches.
 
-If the career is Python Developer,
-skillsToImprove must contain skills specifically required
-for becoming a Python Developer.
-
-If the career is Cloud Architect,
-skillsToImprove must contain skills specifically required
-for Cloud Architecture.
-
-If the career is AI Engineer,
-skillsToImprove must contain skills specifically required
-for Artificial Intelligence and Machine Learning.
-
-The matchPercentage must be calculated based on the student's
-actual profile, current skills, interests, and assessment.
-
-Do not use the same skills for every career.
+Calculate matchPercentage independently for each career
+using the student's actual profile and assessment.
 
 Return ONLY valid JSON.
 
