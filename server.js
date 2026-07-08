@@ -1100,14 +1100,73 @@ The suggested questions must naturally continue the current
 conversation.
 `;
 
-    const aiResponse =
-      await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-      });
+   const geminiResponse = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+  {
+    method: "POST",
 
-    const rawText =
-      aiResponse.text?.trim() ?? "";
+    headers: {
+      "Content-Type": "application/json",
+    },
+
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 2048,
+        responseMimeType:
+          "application/json",
+      },
+    }),
+  }
+);
+
+const geminiData =
+  await geminiResponse.json();
+
+console.log(
+  "GEMINI CHAT STATUS:",
+  geminiResponse.status
+);
+
+console.log(
+  "GEMINI CHAT RESPONSE:",
+  JSON.stringify(
+    geminiData,
+    null,
+    2
+  )
+);
+
+if (!geminiResponse.ok) {
+  throw new Error(
+    geminiData?.error?.message ??
+      "Gemini API request failed"
+  );
+}
+
+const rawText =
+  geminiData
+    ?.candidates?.[0]
+    ?.content?.parts?.[0]
+    ?.text?.trim() ?? "";
+
+if (!rawText) {
+  throw new Error(
+    "Gemini returned an empty chat response"
+  );
+}
 
     console.log(
       "AI GUIDE RAW RESPONSE:",
