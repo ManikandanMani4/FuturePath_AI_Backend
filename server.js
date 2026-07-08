@@ -392,7 +392,83 @@ Do not create global recommendedSkills.
 
 Do not create a global roadmap.
 
+CAREER SKILL MATCH RULES:
 
+For every career, generate careerSkills.
+
+careerSkills represents the important skills required
+for that specific career.
+
+Return 6 to 10 career skills.
+
+Every career skill must contain:
+
+skill
+weight
+currentProficiency
+completed
+
+The total weight of all careerSkills for one career
+MUST equal exactly 100.
+
+weight represents the importance of the skill for
+the career.
+
+Example:
+
+Python = 15
+Machine Learning = 20
+TensorFlow = 15
+Deep Learning = 15
+Cloud Computing = 10
+Docker = 5
+Problem Solving = 10
+Communication = 10
+
+Total = 100.
+
+currentProficiency must be an integer from 0 to 100.
+
+Calculate currentProficiency from the student's
+actual technical skills, proficiency levels,
+assessment and relevant experience.
+
+Use these approximate proficiency meanings:
+
+Missing skill = 0
+
+Beginner = 25
+
+Intermediate = 60
+
+Advanced = 85
+
+Strong demonstrated skill = 100
+
+Do not mark a missing skill as completed.
+
+completed must be true only when currentProficiency
+is 100.
+
+Calculate matchPercentage using careerSkills.
+
+For every career skill:
+
+skillContribution =
+weight * currentProficiency / 100
+
+matchPercentage is the rounded sum of all
+skillContribution values.
+
+Do not invent matchPercentage independently.
+
+skillsToImprove should contain existing career skills
+with low or medium currentProficiency.
+
+recommendedSkills should contain important career skills
+with currentProficiency equal to 0.
+
+The same skill should not appear in both arrays.
 OUTPUT RULES:
 
 Return ONLY valid JSON.
@@ -402,7 +478,6 @@ Do not return markdown.
 Do not return code fences.
 
 Do not include text before or after the JSON.
-
 Use exactly this JSON structure:
 
 {
@@ -411,6 +486,14 @@ Use exactly this JSON structure:
       "career": "Career Name",
       "matchPercentage": 0,
       "reason": "Short personalized reason",
+      "careerSkills": [
+        {
+          "skill": "Skill Name",
+          "weight": 0,
+          "currentProficiency": 0,
+          "completed": false
+        }
+      ],
       "skillsToImprove": [
         "Skill 1",
         "Skill 2",
@@ -424,6 +507,17 @@ Use exactly this JSON structure:
       ]
     }
   ],
+  "strengths": [
+    "Strength 1",
+    "Strength 2",
+    "Strength 3"
+  ],
+  "careerSummary":
+    "Short personalized career summary"
+}
+
+The careerMatches array MUST contain exactly 5 objects.
+
   "strengths": [
     "Strength 1",
     "Strength 2",
@@ -546,94 +640,286 @@ The careerMatches array MUST contain exactly 5 objects.
           "Gemini did not return exactly 5 career matches"
         );
       }
+// ==================================================
+// VALIDATE EVERY CAREER
+// ==================================================
 
+for (
+  const career of analysis.careerMatches
+) {
+  if (
+    !career.career ||
+    typeof career.career !== "string"
+  ) {
+    throw new Error(
+      "Invalid career name"
+    );
+  }
 
-      // ==================================================
-      // VALIDATE EVERY CAREER
-      // ==================================================
+  career.career =
+    career.career.trim();
 
-      for (
-        const career of analysis.careerMatches
-      ) {
-        if (
-          !career.career ||
-          typeof career.career !== "string"
-        ) {
-          throw new Error(
-            "Invalid career name"
-          );
+  if (
+    !Array.isArray(
+      career.careerSkills
+    ) ||
+    career.careerSkills.length < 6
+  ) {
+    throw new Error(
+      `Invalid careerSkills for ${career.career}`
+    );
+  }
+
+  career.careerSkills =
+    career.careerSkills
+      .filter(
+        (careerSkill) =>
+          careerSkill &&
+          typeof careerSkill === "object" &&
+          typeof careerSkill.skill ===
+            "string" &&
+          careerSkill.skill.trim().length > 0
+      )
+      .map(
+        (careerSkill) => {
+          const proficiency =
+            Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round(
+                  Number(
+                    careerSkill
+                      .currentProficiency
+                  ) || 0
+                )
+              )
+            );
+
+          return {
+            skill:
+              careerSkill.skill.trim(),
+
+            weight:
+              Math.max(
+                0,
+                Number(
+                  careerSkill.weight
+                ) || 0
+              ),
+
+            currentProficiency:
+              proficiency,
+
+            completed:
+              proficiency >= 100,
+          };
         }
+      )
+      .slice(0, 10);
 
-        if (
-          typeof career.matchPercentage !==
-          "number"
-        ) {
-          throw new Error(
-            `Invalid match percentage for ${career.career}`
-          );
-        }
+  if (
+    career.careerSkills.length < 6
+  ) {
+    throw new Error(
+      `Insufficient careerSkills for ${career.career}`
+    );
+  }
 
-        career.matchPercentage = Math.max(
-          0,
-          Math.min(
-            100,
-            Math.round(
-              career.matchPercentage
-            )
-          )
+  const totalWeight =
+    career.careerSkills.reduce(
+      (
+        total,
+        careerSkill
+      ) => {
+        return (
+          total +
+          careerSkill.weight
         );
+      },
+      0
+    );
 
-        if (
-          !Array.isArray(
-            career.skillsToImprove
-          )
-        ) {
-          throw new Error(
-            `Invalid skillsToImprove for ${career.career}`
+  if (
+    Math.abs(
+      totalWeight - 100
+    ) > 0.01
+  ) {
+    throw new Error(
+      `Career skill weights must equal 100 for ${career.career}. Received ${totalWeight}`
+    );
+  }
+
+  const calculatedMatch =
+    career.careerSkills.reduce(
+      (
+        total,
+        careerSkill
+      ) => {
+        const contribution =
+          (
+            careerSkill.weight *
+            careerSkill.currentProficiency
+          ) /
+          100;
+
+        return (
+          total +
+          contribution
+        );
+      },
+      0
+    );
+
+  career.matchPercentage =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          calculatedMatch
+        )
+      )
+    );
+
+  if (
+    !Array.isArray(
+      career.skillsToImprove
+    )
+  ) {
+    career.skillsToImprove = [];
+  }
+
+  if (
+    !Array.isArray(
+      career.recommendedSkills
+    )
+  ) {
+    career.recommendedSkills = [];
+  }
+
+  const careerSkillMap =
+    new Map(
+      career.careerSkills.map(
+        (careerSkill) => [
+          careerSkill.skill
+            .toLowerCase(),
+
+          careerSkill,
+        ]
+      )
+    );
+
+  career.skillsToImprove =
+    career.skillsToImprove
+      .filter(
+        (skill) =>
+          typeof skill === "string" &&
+          skill.trim().length > 0
+      )
+      .map(
+        (skill) =>
+          skill.trim()
+      )
+      .filter(
+        (
+          skill,
+          index,
+          skills
+        ) =>
+          skills.findIndex(
+            (item) =>
+              item.toLowerCase() ===
+              skill.toLowerCase()
+          ) === index
+      )
+      .filter(
+        (skill) => {
+          const careerSkill =
+            careerSkillMap.get(
+              skill.toLowerCase()
+            );
+
+          return (
+            careerSkill &&
+            careerSkill.currentProficiency >
+              0 &&
+            careerSkill.currentProficiency <
+              100
           );
         }
+      )
+      .slice(0, 5);
 
-        if (
-          !Array.isArray(
-            career.recommendedSkills
-          )
-        ) {
-          throw new Error(
-            `Invalid recommendedSkills for ${career.career}`
+  career.recommendedSkills =
+    career.recommendedSkills
+      .filter(
+        (skill) =>
+          typeof skill === "string" &&
+          skill.trim().length > 0
+      )
+      .map(
+        (skill) =>
+          skill.trim()
+      )
+      .filter(
+        (
+          skill,
+          index,
+          skills
+        ) =>
+          skills.findIndex(
+            (item) =>
+              item.toLowerCase() ===
+              skill.toLowerCase()
+          ) === index
+      )
+      .filter(
+        (skill) => {
+          const careerSkill =
+            careerSkillMap.get(
+              skill.toLowerCase()
+            );
+
+          return (
+            careerSkill &&
+            careerSkill.currentProficiency ===
+              0
           );
         }
+      )
+      .filter(
+        (skill) =>
+          !career.skillsToImprove.some(
+            (improveSkill) =>
+              improveSkill.toLowerCase() ===
+              skill.toLowerCase()
+          )
+      )
+      .slice(0, 6);
 
-        career.skillsToImprove =
-          career.skillsToImprove
-            .filter(
-              (skill) =>
-                typeof skill === "string" &&
-                skill.trim().length > 0
-            )
-            .map(
-              (skill) => skill.trim()
-            )
-            .slice(0, 5);
+  if (
+    typeof career.reason !== "string"
+  ) {
+    career.reason = "";
+  }
 
-        career.recommendedSkills =
-          career.recommendedSkills
-            .filter(
-              (skill) =>
-                typeof skill === "string" &&
-                skill.trim().length > 0
-            )
-            .map(
-              (skill) => skill.trim()
-            )
-            .slice(0, 6);
+  career.reason =
+    career.reason.trim();
 
-        if (
-          typeof career.reason !== "string"
-        ) {
-          career.reason = "";
-        }
-      }
+  console.log(
+    `CAREER: ${career.career}`
+  );
 
+  console.log(
+    `MATCH: ${career.matchPercentage}%`
+  );
+
+  console.log(
+    "CAREER SKILLS:",
+    career.careerSkills
+  );
+}
 
       // ==================================================
       // STRENGTH VALIDATION
