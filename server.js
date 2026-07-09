@@ -1022,12 +1022,9 @@ app.post(
   "/api/generate-roadmap",
   async (req, res) => {
     try {
-      console.log(
-        "Roadmap generation request received"
-      );
-
       const {
         career,
+        durationMonths,
         profile = {},
         technicalSkills = {},
         softSkills = [],
@@ -1038,6 +1035,15 @@ app.post(
       const cleanCareer =
         career?.toString().trim();
 
+      const cleanDurationMonths =
+        Math.round(
+          Number(durationMonths)
+        );
+
+      // ==================================================
+      // VALIDATE CAREER
+      // ==================================================
+
       if (!cleanCareer) {
         return res.status(400).json({
           success: false,
@@ -1045,28 +1051,120 @@ app.post(
         });
       }
 
-      const prompt = `
+      // ==================================================
+      // VALIDATE DURATION
+      // ==================================================
+
+      if (
+        !Number.isInteger(
+          cleanDurationMonths
+        ) ||
+        cleanDurationMonths < 1 ||
+        cleanDurationMonths > 120
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Roadmap duration must be between 1 and 120 months",
+        });
+      }
+
+      // ==================================================
+      // CAREER SKILLS
+      // ==================================================
+
+      const careerSkills =
+        Array.isArray(
+          selectedCareer.careerSkills
+        )
+          ? selectedCareer.careerSkills
+          : [];
+
+      if (careerSkills.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Career skills not found. Run AI career analysis again.",
+        });
+      }
+
+      // ==================================================
+      // REMAINING CAREER SKILLS
+      // ==================================================
+
+      const remainingCareerSkills =
+        careerSkills.filter(
+          (careerSkill) => {
+            const proficiency =
+              Number(
+                careerSkill
+                  ?.currentProficiency
+              ) || 0;
+
+            return proficiency < 100;
+          }
+        );
+
+      if (
+        remainingCareerSkills.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "You have already completed all required career skills",
+        });
+      }
+
+      console.log(
+        "ROADMAP CAREER:",
+        cleanCareer
+      );
+
+      console.log(
+        "ROADMAP DURATION:",
+        cleanDurationMonths
+      );
+
+      console.log(
+        "REMAINING CAREER SKILLS:",
+        remainingCareerSkills
+      );
+
+      // ==================================================
+      // ROADMAP PROMPT
+      // ==================================================
+
+      const roadmapPrompt = `
 You are FuturePath AI.
 
-You are an expert career learning roadmap planner.
+You are an expert career roadmap architect,
+technical mentor and personalized learning planner.
 
-Generate a personalized learning roadmap for a student.
+Create a personalized career roadmap for the student.
 
-==================================================
-SELECTED CAREER
-==================================================
+CAREER GOAL:
 
 ${cleanCareer}
 
-==================================================
-STUDENT PROFILE
-==================================================
+USER SELECTED ROADMAP DURATION:
 
-${JSON.stringify(profile, null, 2)}
+${cleanDurationMonths} months
 
-==================================================
-TECHNICAL SKILLS
-==================================================
+CURRENT CAREER MATCH:
+
+${Number(
+  selectedCareer.matchPercentage
+) || 0}%
+
+CURRENT PROFILE:
+
+${JSON.stringify(
+  profile,
+  null,
+  2
+)}
+
+CURRENT TECHNICAL SKILLS:
 
 ${JSON.stringify(
   technicalSkills,
@@ -1074,9 +1172,7 @@ ${JSON.stringify(
   2
 )}
 
-==================================================
-SOFT SKILLS
-==================================================
+CURRENT SOFT SKILLS:
 
 ${JSON.stringify(
   softSkills,
@@ -1084,9 +1180,7 @@ ${JSON.stringify(
   2
 )}
 
-==================================================
-CAREER ASSESSMENT
-==================================================
+ASSESSMENT:
 
 ${JSON.stringify(
   assessment,
@@ -1094,124 +1188,100 @@ ${JSON.stringify(
   2
 )}
 
-==================================================
-SELECTED CAREER ANALYSIS
-==================================================
+CAREER SKILL GAP:
 
 ${JSON.stringify(
-  selectedCareer,
+  remainingCareerSkills,
   null,
   2
 )}
 
-==================================================
-ROADMAP GENERATION RULES
-==================================================
+ROADMAP OBJECTIVE:
 
-Generate exactly 12 months.
+The student already has some career knowledge.
 
-The roadmap must help the student progress toward:
+Do not create a generic beginner roadmap.
 
-${cleanCareer}
+Build the roadmap mainly from the remaining
+career skill gaps listed above.
 
-Personalize the roadmap using the student's current
-technical skills and proficiency.
+For a career skill with currentProficiency 0,
+teach it from foundation to practical level.
 
-Do not teach skills the student has already mastered
-as complete beginner topics.
+For a career skill with currentProficiency
+between 1 and 40,
+strengthen foundations before advanced topics.
 
-If the student has a Beginner skill, strengthen its
-foundation before advanced topics.
+For a career skill with currentProficiency
+between 41 and 70,
+focus on intermediate and practical topics.
 
-If the student has an Intermediate skill, include
-practical and advanced usage.
+For a career skill with currentProficiency
+between 71 and 99,
+focus on advanced topics, projects and mastery.
 
-Use skillsToImprove from selectedCareer when available.
+Use the student's existing technical skills
+to avoid unnecessary repetition.
 
-Use recommendedSkills from selectedCareer when available.
+The student selected exactly
+${cleanDurationMonths} months
+to achieve the career goal.
 
-The roadmap must progress logically.
+Generate exactly
+${cleanDurationMonths} roadmap months.
 
-Example progression:
+Every month must have a meaningful learning goal.
 
-foundation
-then
-core skills
-then
-tools and frameworks
-then
-projects
-then
-advanced concepts
-then
-industry preparation
+Distribute the remaining career skill gaps
+across the full selected duration.
 
-Do not generate random unrelated skills.
+Do not finish all major skills in the first
+few months and add filler months later.
 
-Every month must have:
+Use later months for advanced learning,
+integration, real-world projects,
+portfolio development, interview preparation
+and career readiness when appropriate.
 
-3 to 5 skills
+ROADMAP RULES:
 
-3 to 5 practical tasks
+1. Generate exactly ${cleanDurationMonths} months.
 
-1 to 2 projects
+2. monthNumber must start at 1.
 
-Projects must match the selected career.
+3. monthNumber must end at ${cleanDurationMonths}.
 
-Tasks must be practical and measurable.
+4. Every month must contain 3 to 5 skills.
 
-Good task examples:
+5. Every month must contain 3 to 5 tasks.
 
-"Solve 20 array problems"
+6. Every month must contain 1 to 2 projects.
 
-"Build 3 REST API endpoints"
+7. Skills must be specific learning topics.
 
-"Deploy an application to AWS"
+8. Tasks must be actionable.
 
-"Train and evaluate a classification model"
+9. Projects must be practical.
 
-Bad task examples:
+10. Do not include topics the student has already
+fully mastered unless they are required for an
+advanced integration project.
 
-"Learn coding"
+11. The roadmap must directly improve the
+remaining career skills.
 
-"Improve skills"
-
-"Study technology"
-
-Skill names must be clear and searchable.
-
-Project names must be clear.
-
-Do not add completion data based on assumptions.
-
-All completedSkills arrays must be empty.
-
-All completedTasks arrays must be empty.
-
-All completedProjects arrays must be empty.
-
-==================================================
-OUTPUT RULES
-==================================================
-
-Return ONLY valid JSON.
-
-Do not return markdown.
-
-Do not return code fences.
-
-Do not include text before or after JSON.
+12. Return JSON only.
 
 Use exactly this JSON structure:
 
 {
   "career": "${cleanCareer}",
-  "durationMonths": 12,
+  "durationMonths": ${cleanDurationMonths},
   "months": [
     {
       "monthNumber": 1,
-      "title": "Month Title",
-      "description": "Short month description",
+      "title": "Month title",
+      "description": "Short learning objective",
       "skills": [
         "Skill 1",
         "Skill 2",
@@ -1224,87 +1294,73 @@ Use exactly this JSON structure:
       ],
       "projects": [
         "Project 1"
-      ],
-      "completedSkills": [],
-      "completedTasks": [],
-      "completedProjects": []
+      ]
     }
   ]
 }
 
-The months array MUST contain exactly 12 objects.
-
-monthNumber MUST start at 1 and end at 12.
-
-Do not skip month numbers.
-
-Do not duplicate months.
+The months array MUST contain exactly
+${cleanDurationMonths} objects.
 `;
 
-      const requestBody = {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
+      // ==================================================
+      // CALL GEMINI
+      // ==================================================
+
+      const response =
+        await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: roadmapPrompt,
+                },
+              ],
+            },
+          ],
+
+          config: {
+            temperature: 0.45,
+            maxOutputTokens: 65536,
+
+            responseMimeType:
+              "application/json",
           },
-        ],
+        });
 
-        generationConfig: {
-          responseMimeType:
-            "application/json",
-          temperature: 0.4,
-          topP: 0.9,
-          maxOutputTokens: 16384,
-        },
-      };
+      // ==================================================
+      // GET RESPONSE TEXT
+      // ==================================================
 
-      const geminiData =
-        await callGeminiWithRetry(
-          requestBody,
-          3
-        );
+      const rawText =
+        response.text?.trim();
 
-      const responseText =
-        getGeminiResponseText(
-          geminiData
-        );
-
-      if (!responseText) {
-        console.error(
-          "EMPTY ROADMAP RESPONSE:",
-          JSON.stringify(
-            geminiData,
-            null,
-            2
-          )
-        );
-
+      if (!rawText) {
         throw new Error(
-          "Gemini returned an empty roadmap"
+          "Empty roadmap response from Gemini"
         );
       }
 
       console.log(
-        "Gemini roadmap generated"
+        "RAW ROADMAP RESPONSE RECEIVED"
       );
+
+      // ==================================================
+      // PARSE JSON
+      // ==================================================
 
       let roadmap;
 
       try {
-        roadmap = JSON.parse(
-          responseText
-        );
-      } catch (jsonError) {
+        roadmap =
+          JSON.parse(rawText);
+      } catch (parseError) {
         console.error(
-          "INVALID ROADMAP JSON:"
-        );
-
-        console.error(
-          responseText
+          "ROADMAP JSON PARSE ERROR:",
+          parseError
         );
 
         throw new Error(
@@ -1312,104 +1368,51 @@ Do not duplicate months.
         );
       }
 
+      // ==================================================
+      // VALIDATE ROADMAP
+      // ==================================================
+
       if (
         !roadmap ||
         typeof roadmap !== "object"
       ) {
         throw new Error(
-          "Invalid roadmap data"
+          "Invalid roadmap object"
         );
       }
 
       if (
         !Array.isArray(
           roadmap.months
-        ) ||
-        roadmap.months.length !== 12
+        )
       ) {
         throw new Error(
-          "Gemini did not return exactly 12 roadmap months"
+          "Roadmap months not found"
         );
       }
 
-      roadmap.career = cleanCareer;
+      if (
+        roadmap.months.length !==
+        cleanDurationMonths
+      ) {
+        throw new Error(
+          `Gemini returned ${roadmap.months.length} months instead of ${cleanDurationMonths}`
+        );
+      }
 
-      roadmap.durationMonths = 12;
+      // ==================================================
+      // CLEAN ROADMAP MONTHS
+      // ==================================================
 
       roadmap.months =
         roadmap.months.map(
-          (month, index) => {
-            const skills =
-              Array.isArray(month.skills)
-                ? month.skills
-                    .filter(
-                      (skill) =>
-                        typeof skill ===
-                          "string" &&
-                        skill.trim().length > 0
-                    )
-                    .map(
-                      (skill) =>
-                        skill.trim()
-                    )
-                    .slice(0, 5)
-                : [];
-
-            const tasks =
-              Array.isArray(month.tasks)
-                ? month.tasks
-                    .filter(
-                      (task) =>
-                        typeof task ===
-                          "string" &&
-                        task.trim().length > 0
-                    )
-                    .map(
-                      (task) =>
-                        task.trim()
-                    )
-                    .slice(0, 5)
-                : [];
-
-            const projects =
-              Array.isArray(
-                month.projects
-              )
-                ? month.projects
-                    .filter(
-                      (project) =>
-                        typeof project ===
-                          "string" &&
-                        project.trim().length >
-                          0
-                    )
-                    .map(
-                      (project) =>
-                        project.trim()
-                    )
-                    .slice(0, 2)
-                : [];
-
-            if (skills.length < 3) {
-              throw new Error(
-                `Month ${index + 1} has insufficient skills`
-              );
-            }
-
-            if (tasks.length < 3) {
-              throw new Error(
-                `Month ${index + 1} has insufficient tasks`
-              );
-            }
-
-            if (projects.length < 1) {
-              throw new Error(
-                `Month ${index + 1} has no project`
-              );
-            }
-
+          (
+            month,
+            index
+          ) => {
             return {
-              monthNumber: index + 1,
+              monthNumber:
+                index + 1,
 
               title:
                 month.title
@@ -1420,13 +1423,62 @@ Do not duplicate months.
               description:
                 month.description
                   ?.toString()
-                  .trim() || "",
+                  .trim() ||
+                "Continue your career learning journey.",
 
-              skills,
+              skills:
+                Array.isArray(
+                  month.skills
+                )
+                  ? month.skills
+                      .filter(
+                        (skill) =>
+                          typeof skill ===
+                          "string"
+                      )
+                      .map(
+                        (skill) =>
+                          skill.trim()
+                      )
+                      .filter(Boolean)
+                      .slice(0, 5)
+                  : [],
 
-              tasks,
+              tasks:
+                Array.isArray(
+                  month.tasks
+                )
+                  ? month.tasks
+                      .filter(
+                        (task) =>
+                          typeof task ===
+                          "string"
+                      )
+                      .map(
+                        (task) =>
+                          task.trim()
+                      )
+                      .filter(Boolean)
+                      .slice(0, 5)
+                  : [],
 
-              projects,
+              projects:
+                Array.isArray(
+                  month.projects
+                )
+                  ? month.projects
+                      .filter(
+                        (project) =>
+                          typeof project ===
+                          "string"
+                      )
+                      .map(
+                        (project) =>
+                          project.trim()
+                      )
+                      .filter(Boolean)
+                      .slice(0, 2)
+                  : [],
 
               completedSkills: [],
 
@@ -1437,9 +1489,52 @@ Do not duplicate months.
           }
         );
 
+      // ==================================================
+      // FINAL ROADMAP DATA
+      // ==================================================
+
+      roadmap.career =
+        cleanCareer;
+
+      roadmap.durationMonths =
+        cleanDurationMonths;
+
+      roadmap.sourceMatchPercentage =
+        Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              Number(
+                selectedCareer
+                  .matchPercentage
+              ) || 0
+            )
+          )
+        );
+
+      roadmap.sourceCareerSkills =
+        careerSkills;
+
+      roadmap.remainingCareerSkills =
+        remainingCareerSkills;
+
+      roadmap.generatedAt =
+        new Date().toISOString();
+
       console.log(
-        "FuturePath roadmap completed"
+        "ROADMAP GENERATED:",
+        cleanCareer
       );
+
+      console.log(
+        "ROADMAP MONTH COUNT:",
+        roadmap.months.length
+      );
+
+      // ==================================================
+      // SEND RESPONSE
+      // ==================================================
 
       return res.status(200).json({
         success: true,
@@ -1447,58 +1542,23 @@ Do not duplicate months.
       });
     } catch (error) {
       console.error(
-        "ROADMAP GENERATION ERROR:",
-        error.message
+        "ROADMAP ERROR:",
+        error
       );
 
-      if (error.details) {
-        console.error(
-          JSON.stringify(
-            error.details,
-            null,
-            2
-          )
-        );
-      }
-
-      if (error.status === 503) {
-        return res.status(503).json({
-          success: false,
-
-          error:
-            "AI service is temporarily busy",
-
-          message:
-            "Gemini is currently experiencing high demand. Please try again shortly.",
-        });
-      }
-
-      if (error.status === 429) {
-        return res.status(429).json({
-          success: false,
-
-          error:
-            "AI request limit reached",
-
-          message:
-            "Please wait before generating the roadmap again.",
-        });
-      }
-
-      return res.status(
-        error.status || 500
-      ).json({
+      return res.status(500).json({
         success: false,
-
         error:
-          "Unable to generate roadmap",
+          "Unable to generate career roadmap",
 
-        details: error.message,
+        details:
+          error instanceof Error
+            ? error.message
+            : "Unknown roadmap error",
       });
     }
   }
 );
-
 // ======================================================
 // FUTUREPATH AI GUIDE CHAT API
 // ======================================================
