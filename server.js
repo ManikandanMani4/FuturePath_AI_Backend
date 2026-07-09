@@ -1013,97 +1013,207 @@ app.post(
       }
 
 
-      // ==================================================
-      // CAREER SKILLS
-      // ==================================================
+     // ==================================================
+// CAREER SKILLS
+// ==================================================
 
-      const careerSkills =
-        Array.isArray(
-          selectedCareer.careerSkills
-        )
-          ? selectedCareer.careerSkills
-              .filter(
-                (skillData) =>
-                  skillData &&
-                  typeof skillData ===
-                    "object"
+let careerSkills = [];
+
+if (
+  Array.isArray(
+    selectedCareer.careerSkills
+  )
+) {
+  careerSkills =
+    selectedCareer.careerSkills
+      .filter(
+        (skillData) =>
+          skillData &&
+          typeof skillData === "object"
+      )
+      .map(
+        (skillData) => ({
+          skill:
+            skillData.skill
+              ?.toString()
+              .trim() || "",
+
+          weight:
+            Math.max(
+              0,
+              Number(
+                skillData.weight
+              ) || 0
+            ),
+
+          currentProficiency:
+            Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round(
+                  Number(
+                    skillData
+                      .currentProficiency
+                  ) || 0
+                )
               )
-              .map(
-                (skillData) => ({
-                  skill:
-                    skillData.skill
-                      ?.toString()
-                      .trim() ?? "",
-
-                  weight:
-                    Math.max(
-                      0,
-                      Number(
-                        skillData.weight
-                      ) || 0
-                    ),
-
-                  currentProficiency:
-                    Math.max(
-                      0,
-                      Math.min(
-                        100,
-                        Math.round(
-                          Number(
-                            skillData
-                              .currentProficiency
-                          ) || 0
-                        )
-                      )
-                    ),
-
-                  completed:
-                    Number(
-                      skillData
-                        .currentProficiency
-                    ) >= 100,
-                })
-              )
-              .filter(
-                (skillData) =>
-                  skillData.skill
-              )
-          : [];
-
-      if (
-        careerSkills.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
-
-          error:
-            "Career skills not found. Run AI career analysis again.",
-        });
-      }
+            ),
+        })
+      )
+      .filter(
+        (skillData) =>
+          skillData.skill
+      );
+}
 
 
-      // ==================================================
-      // REMAINING CAREER SKILLS
-      // ==================================================
+// ==================================================
+// FALLBACK TO SKILLS TO IMPROVE
+// ==================================================
 
-      const remainingCareerSkills =
-        careerSkills.filter(
-          (careerSkill) =>
-            careerSkill
-              .currentProficiency <
-            100
-        );
+if (
+  careerSkills.length === 0 &&
+  Array.isArray(
+    selectedCareer.skillsToImprove
+  )
+) {
+  careerSkills =
+    selectedCareer.skillsToImprove
+      .map(
+        (skill) => ({
+          skill:
+            skill
+              ?.toString()
+              .trim() || "",
 
-      if (
-        remainingCareerSkills.length === 0
-      ) {
-        return res.status(400).json({
-          success: false,
+          weight: 80,
 
-          error:
-            "All required career skills are already completed",
-        });
-      }
+          currentProficiency: 40,
+        })
+      )
+      .filter(
+        (skillData) =>
+          skillData.skill
+      );
+}
+
+
+// ==================================================
+// FALLBACK TO RECOMMENDED SKILLS
+// ==================================================
+
+if (
+  Array.isArray(
+    selectedCareer.recommendedSkills
+  )
+) {
+  finalRecommendedSkills =
+    selectedCareer.recommendedSkills
+      .map(
+        (skill) =>
+          skill
+            ?.toString()
+            .trim()
+      )
+      .filter(Boolean);
+
+  for (
+    const skill
+    of finalRecommendedSkills
+  ) {
+    const alreadyExists =
+      careerSkills.some(
+        (careerSkill) =>
+          careerSkill.skill
+            .toLowerCase() ===
+          skill.toLowerCase()
+      );
+
+    if (!alreadyExists) {
+      careerSkills.push({
+        skill: skill,
+        weight: 70,
+        currentProficiency: 0,
+      });
+    }
+  }
+}
+
+
+// ==================================================
+// FINAL FALLBACK
+// ==================================================
+
+if (careerSkills.length === 0) {
+  console.log(
+    "CAREER SKILLS NOT AVAILABLE"
+  );
+
+  console.log(
+    "SELECTED CAREER:",
+    selectedCareer
+  );
+
+  careerSkills = [
+    {
+      skill:
+        `${cleanCareer} Fundamentals`,
+      weight: 100,
+      currentProficiency: 0,
+    },
+    {
+      skill:
+        `${cleanCareer} Core Concepts`,
+      weight: 90,
+      currentProficiency: 0,
+    },
+    {
+      skill:
+        `${cleanCareer} Practical Skills`,
+      weight: 80,
+      currentProficiency: 0,
+    },
+    {
+      skill:
+        `${cleanCareer} Projects`,
+      weight: 70,
+      currentProficiency: 0,
+    },
+  ];
+}
+
+
+// ==================================================
+// REMAINING CAREER SKILLS
+// ==================================================
+
+const remainingCareerSkills =
+  careerSkills.filter(
+    (careerSkill) => {
+      const proficiency =
+        Number(
+          careerSkill
+            ?.currentProficiency
+        ) || 0;
+
+      return proficiency < 100;
+    }
+  );
+
+if (
+  remainingCareerSkills.length === 0
+) {
+  return res.status(400).json({
+    success: false,
+
+    error:
+      "All required career skills are already completed",
+  });
+}
+
+
+   
 
 
       console.log(
