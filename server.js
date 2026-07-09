@@ -138,7 +138,7 @@ async function callGeminiWithRetry(
 
 
 // ======================================================
-// GET GEMINI TEXT
+// GET GEMINI RESPONSE TEXT
 // ======================================================
 
 function getGeminiResponseText(
@@ -182,25 +182,11 @@ function parseGeminiJson(
 
 
 // ======================================================
-// NORMALIZE SKILL NAME
-// ======================================================
-
-function normalizeSkillName(
-  value
-) {
-  return value
-    ?.toString()
-    .trim()
-    .toLowerCase() ?? "";
-}
-
-
-// ======================================================
-// HOME
+// HOME API
 // ======================================================
 
 app.get("/", (req, res) => {
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
 
     message:
@@ -218,7 +204,7 @@ app.get("/", (req, res) => {
 
 
 // ======================================================
-// AI CAREER ANALYSIS
+// AI CAREER ANALYSIS API
 // ======================================================
 
 app.post(
@@ -250,7 +236,7 @@ app.post(
 
 
       // ==================================================
-      // PROMPT
+      // CAREER ANALYSIS PROMPT
       // ==================================================
 
       const prompt = `
@@ -486,7 +472,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // REQUEST BODY
+      // GEMINI REQUEST BODY
       // ==================================================
 
       const requestBody = {
@@ -525,7 +511,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // RESPONSE TEXT
+      // GET RESPONSE
       // ==================================================
 
       const rawText =
@@ -545,7 +531,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // PARSE
+      // PARSE JSON
       // ==================================================
 
       let analysis;
@@ -573,7 +559,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // VALIDATE
+      // VALIDATE CAREERS
       // ==================================================
 
       if (
@@ -668,7 +654,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
             // ============================================
-            // NORMALIZE WEIGHTS TO 100
+            // NORMALIZE CAREER SKILL WEIGHTS
             // ============================================
 
             const totalWeight =
@@ -676,15 +662,17 @@ The careerMatches array MUST contain exactly 5 objects.
                 (
                   total,
                   skillData
-                ) =>
-                  total +
-                  skillData.weight,
+                ) => {
+                  return (
+                    total +
+                    skillData.weight
+                  );
+                },
                 0
               );
 
             if (
-              careerSkills.length > 0 &&
-              totalWeight !== 100
+              careerSkills.length > 0
             ) {
               let assignedWeight = 0;
 
@@ -698,8 +686,11 @@ The careerMatches array MUST contain exactly 5 objects.
                     careerSkills.length - 1
                   ) {
                     skillData.weight =
-                      100 -
-                      assignedWeight;
+                      Math.max(
+                        0,
+                        100 -
+                        assignedWeight
+                      );
 
                     return;
                   }
@@ -711,7 +702,7 @@ The careerMatches array MUST contain exactly 5 objects.
                             skillData.weight /
                             totalWeight
                           ) *
-                            100
+                          100
                         )
                       : Math.floor(
                           100 /
@@ -729,7 +720,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
             // ============================================
-            // CALCULATE MATCH
+            // CALCULATE MATCH PERCENTAGE
             // ============================================
 
             const matchPercentage =
@@ -743,14 +734,17 @@ The careerMatches array MUST contain exactly 5 objects.
                         total,
                         skillData
                       ) => {
-                        return (
-                          total +
+                        const contribution =
                           (
                             skillData.weight *
                             skillData
                               .currentProficiency
                           ) /
-                            100
+                          100;
+
+                        return (
+                          total +
+                          contribution
                         );
                       },
                       0
@@ -767,13 +761,16 @@ The careerMatches array MUST contain exactly 5 objects.
             const skillsToImprove =
               careerSkills
                 .filter(
-                  (skillData) =>
-                    skillData
-                      .currentProficiency >
-                      0 &&
-                    skillData
-                      .currentProficiency <
-                      100
+                  (skillData) => {
+                    return (
+                      skillData
+                        .currentProficiency >
+                        0 &&
+                      skillData
+                        .currentProficiency <
+                        100
+                    );
+                  }
                 )
                 .sort(
                   (a, b) =>
@@ -837,6 +834,17 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
+      // SORT CAREERS BY MATCH
+      // ==================================================
+
+      analysis.careerMatches.sort(
+        (a, b) =>
+          b.matchPercentage -
+          a.matchPercentage
+      );
+
+
+      // ==================================================
       // FINAL ANALYSIS
       // ==================================================
 
@@ -852,7 +860,7 @@ The careerMatches array MUST contain exactly 5 objects.
                 .map(
                   (strength) =>
                     strength
-                      .toString()
+                      ?.toString()
                       .trim()
                 )
                 .filter(Boolean)
@@ -881,7 +889,7 @@ The careerMatches array MUST contain exactly 5 objects.
             match:
               careerData.matchPercentage,
 
-            careerSkills:
+            skills:
               careerData
                 .careerSkills.length,
           })
@@ -918,7 +926,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
 // ======================================================
-// ROADMAP GENERATION
+// ROADMAP GENERATION API
 // ======================================================
 
 app.post(
@@ -983,6 +991,29 @@ app.post(
 
 
       // ==================================================
+      // VALIDATE SELECTED CAREER
+      // ==================================================
+
+      const selectedCareerName =
+        selectedCareer.career
+          ?.toString()
+          .trim() ?? "";
+
+      if (
+        selectedCareerName &&
+        selectedCareerName.toLowerCase() !==
+        cleanCareer.toLowerCase()
+      ) {
+        return res.status(400).json({
+          success: false,
+
+          error:
+            "Selected career does not match roadmap career",
+        });
+      }
+
+
+      // ==================================================
       // CAREER SKILLS
       // ==================================================
 
@@ -991,6 +1022,52 @@ app.post(
           selectedCareer.careerSkills
         )
           ? selectedCareer.careerSkills
+              .filter(
+                (skillData) =>
+                  skillData &&
+                  typeof skillData ===
+                    "object"
+              )
+              .map(
+                (skillData) => ({
+                  skill:
+                    skillData.skill
+                      ?.toString()
+                      .trim() ?? "",
+
+                  weight:
+                    Math.max(
+                      0,
+                      Number(
+                        skillData.weight
+                      ) || 0
+                    ),
+
+                  currentProficiency:
+                    Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        Math.round(
+                          Number(
+                            skillData
+                              .currentProficiency
+                          ) || 0
+                        )
+                      )
+                    ),
+
+                  completed:
+                    Number(
+                      skillData
+                        .currentProficiency
+                    ) >= 100,
+                })
+              )
+              .filter(
+                (skillData) =>
+                  skillData.skill
+              )
           : [];
 
       if (
@@ -1011,15 +1088,10 @@ app.post(
 
       const remainingCareerSkills =
         careerSkills.filter(
-          (careerSkill) => {
-            const proficiency =
-              Number(
-                careerSkill
-                  ?.currentProficiency
-              ) || 0;
-
-            return proficiency < 100;
-          }
+          (careerSkill) =>
+            careerSkill
+              .currentProficiency <
+            100
         );
 
       if (
@@ -1035,23 +1107,41 @@ app.post(
 
 
       console.log(
-        "ROADMAP CAREER:",
+        "================================"
+      );
+
+      console.log(
+        "ROADMAP GENERATION STARTED"
+      );
+
+      console.log(
+        "CAREER:",
         cleanCareer
       );
 
       console.log(
-        "ROADMAP DURATION:",
+        "DURATION:",
         cleanDurationMonths
       );
 
       console.log(
+        "CURRENT MATCH:",
+        selectedCareer
+          .matchPercentage
+      );
+
+      console.log(
         "CAREER SKILLS:",
-        careerSkills
+        careerSkills.length
       );
 
       console.log(
         "REMAINING SKILLS:",
-        remainingCareerSkills
+        remainingCareerSkills.length
+      );
+
+      console.log(
+        "================================"
       );
 
 
@@ -1127,6 +1217,16 @@ ${JSON.stringify(
 )}
 
 ==================================================
+ALL CAREER SKILLS
+==================================================
+
+${JSON.stringify(
+  careerSkills,
+  null,
+  2
+)}
+
+==================================================
 REMAINING CAREER SKILLS
 ==================================================
 
@@ -1170,22 +1270,21 @@ ${cleanDurationMonths} months.
 Generate exactly
 ${cleanDurationMonths} roadmap months.
 
-Distribute learning across the full duration.
+Distribute learning across the complete duration.
 
-Do not complete all important skills in the first
-few months.
+Every roadmap skill topic MUST contain
+careerSkill.
 
-Later months may include:
+careerSkill MUST exactly match one skill name from
+REMAINING CAREER SKILLS.
 
-advanced learning
-skill integration
-real-world projects
-portfolio development
-system design
-interview preparation
-career readiness
+This is required because FuturePath uses roadmap
+topic completion to update career skill proficiency
+and career match percentage.
 
-Every month must have meaningful learning.
+Do not use a different career skill name.
+
+Do not create unrelated career skills.
 
 ==================================================
 ROADMAP RULES
@@ -1197,21 +1296,21 @@ ROADMAP RULES
 
 3. monthNumber ends at ${cleanDurationMonths}.
 
-4. Every month must contain 3 to 5 skills.
+4. Every month contains 3 to 5 skill topics.
 
-5. Every month must contain 3 to 5 tasks.
+5. Every month contains 3 to 5 tasks.
 
-6. Every month must contain 1 to 2 projects.
+6. Every month contains 1 to 2 projects.
 
-7. Skills must be specific learning topics.
+7. Skill topics must be specific.
 
 8. Tasks must be actionable.
 
 9. Projects must be practical.
 
-10. Roadmap topics must improve remaining career skills.
+10. Do not add filler months.
 
-11. Do not add filler months.
+11. Use the complete selected duration.
 
 12. Return JSON only.
 
@@ -1230,9 +1329,10 @@ Use exactly this structure:
       "title": "Month title",
       "description": "Short learning objective",
       "skills": [
-        "Skill 1",
-        "Skill 2",
-        "Skill 3"
+        {
+          "topic": "Specific learning topic",
+          "careerSkill": "Exact career skill name"
+        }
       ],
       "tasks": [
         "Task 1",
@@ -1273,7 +1373,7 @@ ${cleanDurationMonths} objects.
           responseMimeType:
             "application/json",
 
-          temperature: 0.45,
+          temperature: 0.35,
 
           maxOutputTokens: 65536,
         },
@@ -1292,7 +1392,7 @@ ${cleanDurationMonths} objects.
 
 
       // ==================================================
-      // RESPONSE
+      // GET RESPONSE
       // ==================================================
 
       const rawText =
@@ -1317,7 +1417,7 @@ ${cleanDurationMonths} objects.
 
 
       // ==================================================
-      // PARSE
+      // PARSE ROADMAP
       // ==================================================
 
       let roadmap;
@@ -1345,7 +1445,7 @@ ${cleanDurationMonths} objects.
 
 
       // ==================================================
-      // VALIDATE
+      // VALIDATE ROADMAP
       // ==================================================
 
       if (
@@ -1382,6 +1482,23 @@ ${cleanDurationMonths} objects.
 
 
       // ==================================================
+      // VALID CAREER SKILL NAMES
+      // ==================================================
+
+      const validCareerSkills =
+        new Map(
+          remainingCareerSkills.map(
+            (skillData) => [
+              skillData.skill
+                .toLowerCase(),
+
+              skillData.skill,
+            ]
+          )
+        );
+
+
+      // ==================================================
       // CLEAN MONTHS
       // ==================================================
 
@@ -1391,6 +1508,65 @@ ${cleanDurationMonths} objects.
             month,
             index
           ) => {
+            const cleanSkills =
+              Array.isArray(
+                month.skills
+              )
+                ? month.skills
+                    .map(
+                      (skillData) => {
+                        if (
+                          typeof skillData ===
+                          "string"
+                        ) {
+                          return {
+                            topic:
+                              skillData.trim(),
+
+                            careerSkill:
+                              remainingCareerSkills[
+                                index %
+                                remainingCareerSkills
+                                  .length
+                              ].skill,
+                          };
+                        }
+
+                        const topic =
+                          skillData?.topic
+                            ?.toString()
+                            .trim() ?? "";
+
+                        const rawCareerSkill =
+                          skillData?.careerSkill
+                            ?.toString()
+                            .trim() ?? "";
+
+                        const careerSkill =
+                          validCareerSkills.get(
+                            rawCareerSkill
+                              .toLowerCase()
+                          ) ??
+                          remainingCareerSkills[
+                            index %
+                            remainingCareerSkills
+                              .length
+                          ].skill;
+
+                        return {
+                          topic,
+
+                          careerSkill,
+                        };
+                      }
+                    )
+                    .filter(
+                      (skillData) =>
+                        skillData.topic
+                    )
+                    .slice(0, 5)
+                : [];
+
             return {
               monthNumber:
                 index + 1,
@@ -1408,19 +1584,7 @@ ${cleanDurationMonths} objects.
                 "Continue your career learning journey.",
 
               skills:
-                Array.isArray(
-                  month.skills
-                )
-                  ? month.skills
-                      .map(
-                        (skill) =>
-                          skill
-                            ?.toString()
-                            .trim()
-                      )
-                      .filter(Boolean)
-                      .slice(0, 5)
-                  : [],
+                cleanSkills,
 
               tasks:
                 Array.isArray(
@@ -1535,7 +1699,7 @@ ${cleanDurationMonths} objects.
 
 
 // ======================================================
-// FUTUREPATH AI GUIDE CHAT
+// FUTUREPATH AI GUIDE CHAT API
 // ======================================================
 
 app.post(
@@ -1595,14 +1759,14 @@ app.post(
 
 
       // ==================================================
-      // CHAT PROMPT
+      // AI GUIDE PROMPT
       // ==================================================
 
       const prompt = `
 You are FuturePath AI Guide.
 
-You are a friendly, intelligent and practical AI career
-assistant inside the FuturePath application.
+You are a friendly, intelligent and practical
+AI career assistant inside FuturePath.
 
 ==================================================
 PROFILE
@@ -1703,7 +1867,7 @@ use selectedCareer.recommendedSkills.
 If the student asks how to increase career match,
 use selectedCareer.careerSkills.
 
-Explain which incomplete career skills should improve.
+Explain incomplete career skills clearly.
 
 For technical questions, explain clearly.
 
@@ -1772,7 +1936,7 @@ Return exactly 3 suggestedQuestions.
 
 
       // ==================================================
-      // RESPONSE TEXT
+      // GET RESPONSE
       // ==================================================
 
       const rawText =
@@ -1788,7 +1952,7 @@ Return exactly 3 suggestedQuestions.
 
 
       // ==================================================
-      // PARSE
+      // PARSE CHAT JSON
       // ==================================================
 
       let chatResult;
@@ -1814,6 +1978,10 @@ Return exactly 3 suggestedQuestions.
         );
       }
 
+
+      // ==================================================
+      // CLEAN CHAT RESPONSE
+      // ==================================================
 
       const answer =
         chatResult.answer
@@ -1878,7 +2046,7 @@ Return exactly 3 suggestedQuestions.
 // ======================================================
 
 app.use((req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
 
     error:
