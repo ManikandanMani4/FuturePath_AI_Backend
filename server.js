@@ -924,7 +924,6 @@ The careerMatches array MUST contain exactly 5 objects.
   }
 );
 
-
 // ======================================================
 // ROADMAP GENERATION API
 // ======================================================
@@ -944,17 +943,12 @@ app.post(
       } = req.body;
 
       const cleanCareer =
-        career
-          ?.toString()
-          .trim();
+        career?.toString().trim() || "";
 
       const cleanDurationMonths =
         Math.round(
-          Number(
-            durationMonths
-          )
+          Number(durationMonths)
         );
-
 
       // ==================================================
       // VALIDATE CAREER
@@ -963,12 +957,9 @@ app.post(
       if (!cleanCareer) {
         return res.status(400).json({
           success: false,
-
-          error:
-            "Career is required",
+          error: "Career is required",
         });
       }
-
 
       // ==================================================
       // VALIDATE DURATION
@@ -983,12 +974,10 @@ app.post(
       ) {
         return res.status(400).json({
           success: false,
-
           error:
             "Roadmap duration must be between 1 and 120 months",
         });
       }
-
 
       // ==================================================
       // VALIDATE SELECTED CAREER
@@ -997,224 +986,265 @@ app.post(
       const selectedCareerName =
         selectedCareer.career
           ?.toString()
-          .trim() ?? "";
+          .trim() || "";
 
       if (
         selectedCareerName &&
         selectedCareerName.toLowerCase() !==
-        cleanCareer.toLowerCase()
+          cleanCareer.toLowerCase()
       ) {
         return res.status(400).json({
           success: false,
-
           error:
             "Selected career does not match roadmap career",
         });
       }
 
+      // ==================================================
+      // CURRENT MATCH
+      // ==================================================
 
-     // ==================================================
-// CAREER SKILLS
-// ==================================================
-
-let careerSkills = [];
-
-if (
-  Array.isArray(
-    selectedCareer.careerSkills
-  )
-) {
-  careerSkills =
-    selectedCareer.careerSkills
-      .filter(
-        (skillData) =>
-          skillData &&
-          typeof skillData === "object"
-      )
-      .map(
-        (skillData) => ({
-          skill:
-            skillData.skill
-              ?.toString()
-              .trim() || "",
-
-          weight:
-            Math.max(
-              0,
+      const currentMatchPercentage =
+        Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
               Number(
-                skillData.weight
+                selectedCareer
+                  .careerReadiness ??
+                selectedCareer
+                  .matchPercentage
               ) || 0
-            ),
+            )
+          )
+        );
 
-          currentProficiency:
-            Math.max(
-              0,
-              Math.min(
-                100,
-                Math.round(
-                  Number(
-                    skillData
-                      .currentProficiency
-                  ) || 0
-                )
+      const remainingPercentage =
+        100 - currentMatchPercentage;
+
+      // ==================================================
+      // CAREER SKILLS
+      // ==================================================
+
+      let careerSkills = [];
+
+      if (
+        Array.isArray(
+          selectedCareer.careerSkills
+        )
+      ) {
+        careerSkills =
+          selectedCareer.careerSkills
+            .filter(
+              (skillData) =>
+                skillData &&
+                typeof skillData ===
+                  "object"
+            )
+            .map(
+              (skillData) => {
+                const currentProficiency =
+                  Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      Math.round(
+                        Number(
+                          skillData
+                            .currentProficiency
+                        ) || 0
+                      )
+                    )
+                  );
+
+                return {
+                  skill:
+                    skillData.skill
+                      ?.toString()
+                      .trim() || "",
+
+                  weight:
+                    Math.max(
+                      0,
+                      Number(
+                        skillData.weight
+                      ) || 0
+                    ),
+
+                  currentProficiency,
+
+                  completed:
+                    currentProficiency ===
+                    100,
+                };
+              }
+            )
+            .filter(
+              (skillData) =>
+                skillData.skill
+            );
+      }
+
+      // ==================================================
+      // FALLBACK SKILLS TO IMPROVE
+      // ==================================================
+
+      if (
+        careerSkills.length === 0 &&
+        Array.isArray(
+          selectedCareer.skillsToImprove
+        )
+      ) {
+        careerSkills =
+          selectedCareer.skillsToImprove
+            .map(
+              (skill) => ({
+                skill:
+                  skill
+                    ?.toString()
+                    .trim() || "",
+
+                weight: 1,
+
+                currentProficiency: 40,
+
+                completed: false,
+              })
+            )
+            .filter(
+              (skillData) =>
+                skillData.skill
+            );
+      }
+
+      // ==================================================
+      // ADD RECOMMENDED SKILLS
+      // ==================================================
+
+      const finalRecommendedSkills =
+        Array.isArray(
+          selectedCareer.recommendedSkills
+        )
+          ? selectedCareer
+              .recommendedSkills
+              .map(
+                (skill) =>
+                  skill
+                    ?.toString()
+                    .trim()
               )
-            ),
-        })
-      )
-      .filter(
-        (skillData) =>
-          skillData.skill
-      );
-}
+              .filter(Boolean)
+          : [];
 
+      for (
+        const skill
+        of finalRecommendedSkills
+      ) {
+        const alreadyExists =
+          careerSkills.some(
+            (careerSkill) =>
+              careerSkill.skill
+                .toLowerCase() ===
+              skill.toLowerCase()
+          );
 
-// ==================================================
-// FALLBACK TO SKILLS TO IMPROVE
-// ==================================================
+        if (!alreadyExists) {
+          careerSkills.push({
+            skill,
+            weight: 1,
+            currentProficiency: 0,
+            completed: false,
+          });
+        }
+      }
 
-if (
-  careerSkills.length === 0 &&
-  Array.isArray(
-    selectedCareer.skillsToImprove
-  )
-) {
-  careerSkills =
-    selectedCareer.skillsToImprove
-      .map(
-        (skill) => ({
-          skill:
-            skill
-              ?.toString()
-              .trim() || "",
+      // ==================================================
+      // FINAL FALLBACK
+      // ==================================================
 
-          weight: 80,
+      if (careerSkills.length === 0) {
+        careerSkills = [
+          {
+            skill:
+              `${cleanCareer} Fundamentals`,
+            weight: 25,
+            currentProficiency: 0,
+            completed: false,
+          },
+          {
+            skill:
+              `${cleanCareer} Core Concepts`,
+            weight: 25,
+            currentProficiency: 0,
+            completed: false,
+          },
+          {
+            skill:
+              `${cleanCareer} Practical Skills`,
+            weight: 25,
+            currentProficiency: 0,
+            completed: false,
+          },
+          {
+            skill:
+              `${cleanCareer} Advanced Skills`,
+            weight: 25,
+            currentProficiency: 0,
+            completed: false,
+          },
+        ];
+      }
 
-          currentProficiency: 40,
-        })
-      )
-      .filter(
-        (skillData) =>
-          skillData.skill
-      );
-}
+      // ==================================================
+      // UNIQUE CAREER SKILLS
+      // ==================================================
 
+      const uniqueCareerSkills = [];
 
-// ==================================================
-// FALLBACK TO RECOMMENDED SKILLS
-// ==================================================
+      for (
+        const careerSkill
+        of careerSkills
+      ) {
+        const alreadyExists =
+          uniqueCareerSkills.some(
+            (existingSkill) =>
+              existingSkill.skill
+                .toLowerCase() ===
+              careerSkill.skill
+                .toLowerCase()
+          );
 
-if (
-  Array.isArray(
-    selectedCareer.recommendedSkills
-  )
-) {
-  finalRecommendedSkills =
-    selectedCareer.recommendedSkills
-      .map(
-        (skill) =>
-          skill
-            ?.toString()
-            .trim()
-      )
-      .filter(Boolean);
+        if (!alreadyExists) {
+          uniqueCareerSkills.push(
+            careerSkill
+          );
+        }
+      }
 
-  for (
-    const skill
-    of finalRecommendedSkills
-  ) {
-    const alreadyExists =
-      careerSkills.some(
-        (careerSkill) =>
-          careerSkill.skill
-            .toLowerCase() ===
-          skill.toLowerCase()
-      );
+      careerSkills =
+        uniqueCareerSkills;
 
-    if (!alreadyExists) {
-      careerSkills.push({
-        skill: skill,
-        weight: 70,
-        currentProficiency: 0,
-      });
-    }
-  }
-}
+      // ==================================================
+      // REMAINING CAREER SKILLS
+      // ==================================================
 
+      const remainingCareerSkills =
+        careerSkills.filter(
+          (careerSkill) =>
+            careerSkill
+              .currentProficiency < 100
+        );
 
-// ==================================================
-// FINAL FALLBACK
-// ==================================================
-
-if (careerSkills.length === 0) {
-  console.log(
-    "CAREER SKILLS NOT AVAILABLE"
-  );
-
-  console.log(
-    "SELECTED CAREER:",
-    selectedCareer
-  );
-
-  careerSkills = [
-    {
-      skill:
-        `${cleanCareer} Fundamentals`,
-      weight: 100,
-      currentProficiency: 0,
-    },
-    {
-      skill:
-        `${cleanCareer} Core Concepts`,
-      weight: 90,
-      currentProficiency: 0,
-    },
-    {
-      skill:
-        `${cleanCareer} Practical Skills`,
-      weight: 80,
-      currentProficiency: 0,
-    },
-    {
-      skill:
-        `${cleanCareer} Projects`,
-      weight: 70,
-      currentProficiency: 0,
-    },
-  ];
-}
-
-
-// ==================================================
-// REMAINING CAREER SKILLS
-// ==================================================
-
-const remainingCareerSkills =
-  careerSkills.filter(
-    (careerSkill) => {
-      const proficiency =
-        Number(
-          careerSkill
-            ?.currentProficiency
-        ) || 0;
-
-      return proficiency < 100;
-    }
-  );
-
-if (
-  remainingCareerSkills.length === 0
-) {
-  return res.status(400).json({
-    success: false,
-
-    error:
-      "All required career skills are already completed",
-  });
-}
-
-
-   
-
+      if (
+        remainingCareerSkills.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "All required career skills are already completed",
+        });
+      }
 
       console.log(
         "================================"
@@ -1236,24 +1266,30 @@ if (
 
       console.log(
         "CURRENT MATCH:",
-        selectedCareer
-          .matchPercentage
+        currentMatchPercentage
       );
 
       console.log(
-        "CAREER SKILLS:",
+        "REMAINING PERCENTAGE:",
+        remainingPercentage
+      );
+
+      console.log(
+        "TOTAL CAREER SKILLS:",
         careerSkills.length
       );
 
       console.log(
-        "REMAINING SKILLS:",
-        remainingCareerSkills.length
+        "REMAINING CAREER SKILLS:",
+        remainingCareerSkills.map(
+          (skillData) =>
+            skillData.skill
+        )
       );
 
       console.log(
         "================================"
       );
-
 
       // ==================================================
       // ROADMAP PROMPT
@@ -1264,7 +1300,7 @@ You are FuturePath AI.
 
 You are an expert personalized career roadmap architect.
 
-Create a personalized career roadmap.
+Create a personalized career skill-gap roadmap.
 
 ==================================================
 CAREER GOAL
@@ -1279,12 +1315,20 @@ USER SELECTED DURATION
 ${cleanDurationMonths} months
 
 ==================================================
-CURRENT CAREER MATCH
+CURRENT CAREER READINESS
 ==================================================
 
-${Number(
-  selectedCareer.matchPercentage
-) || 0}%
+${currentMatchPercentage}%
+
+==================================================
+REMAINING CAREER GAP
+==================================================
+
+${remainingPercentage}%
+
+The purpose of this roadmap is to help the student
+close the remaining ${remainingPercentage}% career gap
+and reach 100% career readiness.
 
 ==================================================
 PROFILE
@@ -1347,54 +1391,122 @@ ${JSON.stringify(
 )}
 
 ==================================================
-ROADMAP OBJECTIVE
+CRITICAL FUTUREPATH ROADMAP OBJECTIVE
 ==================================================
 
-Build the roadmap from the student's remaining
-career skill gaps.
+The roadmap MUST cover EVERY skill from
+REMAINING CAREER SKILLS.
+
+No remaining career skill may be skipped.
+
+The student must be able to complete this roadmap
+and close the complete remaining career gap.
 
 Do not create a generic beginner roadmap.
 
-Do not unnecessarily repeat skills the student
-already mastered.
+Do not unnecessarily teach skills already at
+100 currentProficiency.
 
 For currentProficiency 0:
 
-Teach foundation, intermediate and practical topics.
+Teach foundation,
+intermediate concepts,
+practical implementation,
+and mastery topics.
 
 For currentProficiency 1 to 40:
 
-Strengthen foundations and practical skills.
+Strengthen foundations,
+core concepts,
+and practical implementation.
 
 For currentProficiency 41 to 70:
 
-Focus on intermediate and real-world implementation.
+Focus on intermediate concepts,
+real-world implementation,
+advanced practice,
+and projects.
 
 For currentProficiency 71 to 99:
 
-Focus on advanced learning, mastery and projects.
+Focus on advanced concepts,
+mastery,
+production usage,
+and real-world projects.
 
-The user selected exactly
-${cleanDurationMonths} months.
+==================================================
+CAREER SKILL MAPPING RULE
+==================================================
 
-Generate exactly
-${cleanDurationMonths} roadmap months.
+Every roadmap skill topic MUST contain:
 
-Distribute learning across the complete duration.
+topic
+careerSkill
 
-Every roadmap skill topic MUST contain
-careerSkill.
+careerSkill MUST exactly match the "skill" value
+of one object from REMAINING CAREER SKILLS.
 
-careerSkill MUST exactly match one skill name from
-REMAINING CAREER SKILLS.
+Example:
 
-This is required because FuturePath uses roadmap
-topic completion to update career skill proficiency
-and career match percentage.
+{
+  "topic": "Kubernetes Deployment Strategies",
+  "careerSkill": "Kubernetes"
+}
 
-Do not use a different career skill name.
+Do not rename careerSkill.
+
+Do not abbreviate careerSkill.
+
+Do not create new careerSkill names.
 
 Do not create unrelated career skills.
+
+A career skill may have multiple learning topics.
+
+All topics required to master a career skill should
+use the exact same careerSkill value.
+
+==================================================
+COMPLETE SKILL COVERAGE RULE
+==================================================
+
+Every skill in REMAINING CAREER SKILLS MUST appear
+as careerSkill in at least one roadmap skill topic.
+
+Before returning JSON, verify:
+
+1. Read every REMAINING CAREER SKILL.
+2. Find it in the roadmap.
+3. Confirm at least one topic uses that exact careerSkill.
+4. If a career skill is missing, add topics for it.
+5. Return the roadmap only after all remaining career
+   skills are covered.
+
+==================================================
+DURATION RULE
+==================================================
+
+The user selected exactly:
+
+${cleanDurationMonths} months.
+
+Generate exactly:
+
+${cleanDurationMonths} roadmap months.
+
+Use the complete duration.
+
+Distribute all remaining career skills across the
+selected duration.
+
+If duration is long, divide a career skill into
+foundation, intermediate, advanced, practical,
+and mastery topics.
+
+If duration is short, prioritize the most important
+topics required to master every remaining career skill.
+
+Do not skip any remaining career skill.
 
 ==================================================
 ROADMAP RULES
@@ -1408,9 +1520,9 @@ ROADMAP RULES
 
 4. Every month contains 3 to 5 skill topics.
 
-5. Every month contains 3 to 5 tasks.
+5. Every month contains 3 to 5 actionable tasks.
 
-6. Every month contains 1 to 2 projects.
+6. Every month contains 1 to 2 practical projects.
 
 7. Skill topics must be specific.
 
@@ -1422,7 +1534,9 @@ ROADMAP RULES
 
 11. Use the complete selected duration.
 
-12. Return JSON only.
+12. Cover all remaining career skills.
+
+13. Return JSON only.
 
 ==================================================
 OUTPUT
@@ -1458,8 +1572,9 @@ Use exactly this structure:
 
 The months array MUST contain exactly
 ${cleanDurationMonths} objects.
-`;
 
+Return ONLY valid JSON.
+`;
 
       // ==================================================
       // GEMINI REQUEST
@@ -1469,11 +1584,9 @@ ${cleanDurationMonths} objects.
         contents: [
           {
             role: "user",
-
             parts: [
               {
-                text:
-                  roadmapPrompt,
+                text: roadmapPrompt,
               },
             ],
           },
@@ -1483,12 +1596,11 @@ ${cleanDurationMonths} objects.
           responseMimeType:
             "application/json",
 
-          temperature: 0.35,
+          temperature: 0.25,
 
           maxOutputTokens: 65536,
         },
       };
-
 
       // ==================================================
       // CALL GEMINI
@@ -1499,7 +1611,6 @@ ${cleanDurationMonths} objects.
           roadmapRequestBody,
           3
         );
-
 
       // ==================================================
       // GET RESPONSE
@@ -1524,7 +1635,6 @@ ${cleanDurationMonths} objects.
           "Gemini returned empty roadmap response"
         );
       }
-
 
       // ==================================================
       // PARSE ROADMAP
@@ -1552,7 +1662,6 @@ ${cleanDurationMonths} objects.
           "Gemini returned invalid roadmap JSON"
         );
       }
-
 
       // ==================================================
       // VALIDATE ROADMAP
@@ -1582,17 +1691,12 @@ ${cleanDurationMonths} objects.
         cleanDurationMonths
       ) {
         throw new Error(
-          `Gemini returned ${
-            roadmap.months.length
-          } months instead of ${
-            cleanDurationMonths
-          }`
+          `Gemini returned ${roadmap.months.length} months instead of ${cleanDurationMonths}`
         );
       }
 
-
       // ==================================================
-      // VALID CAREER SKILL NAMES
+      // VALID CAREER SKILLS
       // ==================================================
 
       const validCareerSkills =
@@ -1606,7 +1710,6 @@ ${cleanDurationMonths} objects.
             ]
           )
         );
-
 
       // ==================================================
       // CLEAN MONTHS
@@ -1626,54 +1729,43 @@ ${cleanDurationMonths} objects.
                     .map(
                       (skillData) => {
                         if (
-                          typeof skillData ===
-                          "string"
+                          !skillData ||
+                          typeof skillData !==
+                            "object"
                         ) {
-                          return {
-                            topic:
-                              skillData.trim(),
-
-                            careerSkill:
-                              remainingCareerSkills[
-                                index %
-                                remainingCareerSkills
-                                  .length
-                              ].skill,
-                          };
+                          return null;
                         }
 
                         const topic =
-                          skillData?.topic
+                          skillData.topic
                             ?.toString()
-                            .trim() ?? "";
+                            .trim() || "";
 
                         const rawCareerSkill =
-                          skillData?.careerSkill
+                          skillData.careerSkill
                             ?.toString()
-                            .trim() ?? "";
+                            .trim() || "";
 
                         const careerSkill =
                           validCareerSkills.get(
                             rawCareerSkill
                               .toLowerCase()
-                          ) ??
-                          remainingCareerSkills[
-                            index %
-                            remainingCareerSkills
-                              .length
-                          ].skill;
+                          );
+
+                        if (
+                          !topic ||
+                          !careerSkill
+                        ) {
+                          return null;
+                        }
 
                         return {
                           topic,
-
                           careerSkill,
                         };
                       }
                     )
-                    .filter(
-                      (skillData) =>
-                        skillData.topic
-                    )
+                    .filter(Boolean)
                     .slice(0, 5)
                 : [];
 
@@ -1735,6 +1827,138 @@ ${cleanDurationMonths} objects.
           }
         );
 
+      // ==================================================
+      // CHECK CAREER SKILL COVERAGE
+      // ==================================================
+
+      const coveredCareerSkills =
+        new Set();
+
+      for (
+        const month
+        of roadmap.months
+      ) {
+        for (
+          const skill
+          of month.skills
+        ) {
+          coveredCareerSkills.add(
+            skill.careerSkill
+              .toLowerCase()
+          );
+        }
+      }
+
+      const missingCareerSkills =
+        remainingCareerSkills.filter(
+          (careerSkill) =>
+            !coveredCareerSkills.has(
+              careerSkill.skill
+                .toLowerCase()
+            )
+        );
+
+      console.log(
+        "COVERED CAREER SKILLS:",
+        Array.from(
+          coveredCareerSkills
+        )
+      );
+
+      console.log(
+        "MISSING CAREER SKILLS:",
+        missingCareerSkills.map(
+          (skillData) =>
+            skillData.skill
+        )
+      );
+
+      // ==================================================
+      // FORCE MISSING SKILLS INTO ROADMAP
+      // ==================================================
+
+      for (
+        let index = 0;
+        index <
+        missingCareerSkills.length;
+        index++
+      ) {
+        const missingSkill =
+          missingCareerSkills[index];
+
+        const targetMonthIndex =
+          index %
+          roadmap.months.length;
+
+        const targetMonth =
+          roadmap.months[
+            targetMonthIndex
+          ];
+
+        const forcedTopic = {
+          topic:
+            `${missingSkill.skill} Mastery and Practical Implementation`,
+
+          careerSkill:
+            missingSkill.skill,
+        };
+
+        if (
+          targetMonth.skills.length < 5
+        ) {
+          targetMonth.skills.push(
+            forcedTopic
+          );
+        } else {
+          targetMonth.skills[
+            targetMonth.skills.length - 1
+          ] = forcedTopic;
+        }
+      }
+
+      // ==================================================
+      // FINAL COVERAGE VALIDATION
+      // ==================================================
+
+      const finalCoveredCareerSkills =
+        new Set();
+
+      for (
+        const month
+        of roadmap.months
+      ) {
+        for (
+          const skill
+          of month.skills
+        ) {
+          finalCoveredCareerSkills.add(
+            skill.careerSkill
+              .toLowerCase()
+          );
+        }
+      }
+
+      const finalMissingSkills =
+        remainingCareerSkills.filter(
+          (careerSkill) =>
+            !finalCoveredCareerSkills.has(
+              careerSkill.skill
+                .toLowerCase()
+            )
+        );
+
+      if (
+        finalMissingSkills.length > 0
+      ) {
+        throw new Error(
+          `Roadmap does not cover career skills: ${finalMissingSkills
+            .map(
+              (skillData) =>
+                skillData.skill
+            )
+            .join(", ")}`
+        );
+      }
 
       // ==================================================
       // FINAL ROADMAP
@@ -1747,18 +1971,10 @@ ${cleanDurationMonths} objects.
         cleanDurationMonths;
 
       roadmap.sourceMatchPercentage =
-        Math.max(
-          0,
-          Math.min(
-            100,
-            Math.round(
-              Number(
-                selectedCareer
-                  .matchPercentage
-              ) || 0
-            )
-          )
-        );
+        currentMatchPercentage;
+
+      roadmap.remainingPercentage =
+        remainingPercentage;
 
       roadmap.sourceCareerSkills =
         careerSkills;
@@ -1766,9 +1982,15 @@ ${cleanDurationMonths} objects.
       roadmap.remainingCareerSkills =
         remainingCareerSkills;
 
+      roadmap.totalGapSkills =
+        remainingCareerSkills.length;
+
       roadmap.generatedAt =
         new Date().toISOString();
 
+      console.log(
+        "================================"
+      );
 
       console.log(
         "ROADMAP GENERATED:",
@@ -1780,10 +2002,31 @@ ${cleanDurationMonths} objects.
         roadmap.months.length
       );
 
+      console.log(
+        "SOURCE MATCH:",
+        roadmap.sourceMatchPercentage
+      );
+
+      console.log(
+        "REMAINING GAP:",
+        roadmap.remainingPercentage
+      );
+
+      console.log(
+        "TOTAL GAP SKILLS:",
+        roadmap.totalGapSkills
+      );
+
+      console.log(
+        "ALL REMAINING SKILLS COVERED"
+      );
+
+      console.log(
+        "================================"
+      );
 
       return res.status(200).json({
         success: true,
-
         roadmap,
       });
     } catch (error) {
@@ -1806,7 +2049,6 @@ ${cleanDurationMonths} objects.
     }
   }
 );
-
 
 // ======================================================
 // FUTUREPATH AI GUIDE CHAT API
