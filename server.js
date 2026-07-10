@@ -120,8 +120,8 @@ async function callGroqWithRetry(
             max_tokens: Math.min(
               generationConfig
                 .maxOutputTokens ??
-                8192,
-              32768
+               4096 ,
+              8000
             ),
 
             response_format: {
@@ -566,7 +566,7 @@ The careerMatches array MUST contain exactly 5 objects.
         generationConfig: {
           temperature: 0.35,
 
-          maxOutputTokens: 16384,
+          maxOutputTokens: 4096,
         },
       };
 
@@ -1756,7 +1756,7 @@ Return ONLY valid JSON.
         generationConfig: {
           temperature: 0.25,
 
-          maxOutputTokens: 32768,
+          maxOutputTokens: 7000,
         },
       };
 
@@ -2472,7 +2472,7 @@ Return exactly 3 suggestedQuestions.
         generationConfig: {
           temperature: 0.8,
 
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1500,
         },
       };
 
