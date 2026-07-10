@@ -1,6 +1,8 @@
+
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const { GoogleGenAI } = require("@google/genai");
 
 dotenv.config();
 
@@ -12,16 +14,22 @@ app.use(express.json());
 const API_KEY = process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-  console.error("GEMINI_API_KEY is missing");
+  console.error(
+    "GEMINI_API_KEY is missing"
+  );
+
   process.exit(1);
 }
 
 const MODEL = "gemini-2.5-flash";
 
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const ai = new GoogleGenAI({
+  apiKey: API_KEY,
+});
 
-
+console.log(
+  "Gemini AI client initialized"
+);
 // ======================================================
 // WAIT
 // ======================================================
@@ -46,89 +54,91 @@ async function callGeminiWithRetry(
     attempt <= maxRetries;
     attempt++
   ) {
-    console.log(
-      `Gemini request attempt ${attempt + 1}`
-    );
-
-    const response = await fetch(
-      GEMINI_URL,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-
-          "x-goog-api-key": API_KEY,
-        },
-
-        body: JSON.stringify(
-          requestBody
-        ),
-      }
-    );
-
-    let data;
-
     try {
-      data = await response.json();
-    } catch (error) {
-      const parseError = new Error(
-        "Gemini returned invalid response"
+      console.log(
+        `Gemini request attempt ${
+          attempt + 1
+        }`
       );
 
-      parseError.status =
-        response.status;
+      const contents =
+        requestBody.contents ?? [];
 
-      throw parseError;
-    }
+      const generationConfig =
+        requestBody.generationConfig ?? {};
 
-    if (response.ok) {
+      const response =
+        await ai.models.generateContent({
+          model: MODEL,
+
+          contents,
+
+          config: {
+            temperature:
+              generationConfig.temperature ??
+              0.35,
+
+            maxOutputTokens:
+              generationConfig
+                .maxOutputTokens ??
+              8192,
+
+            responseMimeType:
+              generationConfig
+                .responseMimeType ??
+              "application/json",
+          },
+        });
+
       console.log(
         "Gemini response received"
       );
 
-      return data;
-    }
-
-    if (
-      (
-        response.status === 503 ||
-        response.status === 429
-      ) &&
-      attempt < maxRetries
-    ) {
-      const waitTime =
-        Math.pow(2, attempt) * 2000;
-
-      console.log(
-        `Gemini busy. Waiting ${
-          waitTime / 1000
-        } seconds`
+      return response;
+    } catch (error) {
+      console.error(
+        `Gemini attempt ${
+          attempt + 1
+        } failed:`,
+        error
       );
 
-      await wait(waitTime);
+      const status =
+        error?.status ??
+        error?.code ??
+        500;
 
-      continue;
+      const retryable =
+        status === 429 ||
+        status === 503 ||
+        status === "429" ||
+        status === "503";
+
+      if (
+        retryable &&
+        attempt < maxRetries
+      ) {
+        const waitTime =
+          Math.pow(
+            2,
+            attempt
+          ) * 2000;
+
+        console.log(
+          `Gemini busy. Waiting ${
+            waitTime / 1000
+          } seconds`
+        );
+
+        await wait(
+          waitTime
+        );
+
+        continue;
+      }
+
+      throw error;
     }
-
-    console.error(
-      "GEMINI ERROR:",
-      JSON.stringify(
-        data,
-        null,
-        2
-      )
-    );
-
-    const error = new Error(
-      data?.error?.message ||
-      "Gemini API request failed"
-    );
-
-    error.status =
-      response.status;
-
-    throw error;
   }
 
   throw new Error(
@@ -144,23 +154,26 @@ async function callGeminiWithRetry(
 function getGeminiResponseText(
   geminiData
 ) {
-  const parts =
-    geminiData
-      ?.candidates?.[0]
-      ?.content?.parts;
+  try {
+    const text =
+      geminiData?.text;
 
-  if (!Array.isArray(parts)) {
+    if (
+      typeof text === "string"
+    ) {
+      return text.trim();
+    }
+
+    return "";
+  } catch (error) {
+    console.error(
+      "Gemini response text error:",
+      error
+    );
+
     return "";
   }
-
-  return parts
-    .map((part) => {
-      return part?.text ?? "";
-    })
-    .join("")
-    .trim();
 }
-
 
 // ======================================================
 // PARSE GEMINI JSON
