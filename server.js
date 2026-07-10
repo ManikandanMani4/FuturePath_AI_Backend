@@ -1,8 +1,7 @@
-
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const { GoogleGenAI } = require("@google/genai");
+const Groq = require("groq-sdk");
 
 dotenv.config();
 
@@ -11,41 +10,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY =
+  process.env.GROQ_API_KEY;
 
 if (!API_KEY) {
   console.error(
-    "GEMINI_API_KEY is missing"
+    "GROQ_API_KEY is missing"
   );
 
   process.exit(1);
 }
 
-const MODEL = "gemini-2.5-flash";
+const MODEL =
+  "llama-3.3-70b-versatile";
 
-const ai = new GoogleGenAI({
+const groq = new Groq({
   apiKey: API_KEY,
 });
 
 console.log(
-  "Gemini AI client initialized"
+  "Groq AI client initialized"
 );
+
+
 // ======================================================
 // WAIT
 // ======================================================
 
 function wait(milliseconds) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+  return new Promise(
+    (resolve) => {
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
 }
 
 
 // ======================================================
-// GEMINI RETRY
+// GROQ RETRY
 // ======================================================
 
-async function callGeminiWithRetry(
+async function callGroqWithRetry(
   requestBody,
   maxRetries = 3
 ) {
@@ -56,7 +64,7 @@ async function callGeminiWithRetry(
   ) {
     try {
       console.log(
-        `Gemini request attempt ${
+        `Groq request attempt ${
           attempt + 1
         }`
       );
@@ -65,39 +73,70 @@ async function callGeminiWithRetry(
         requestBody.contents ?? [];
 
       const generationConfig =
-        requestBody.generationConfig ?? {};
+        requestBody
+          .generationConfig ?? {};
+
+      const prompt = contents
+        .flatMap(
+          (content) => {
+            return Array.isArray(
+              content?.parts
+            )
+              ? content.parts
+              : [];
+          }
+        )
+        .map(
+          (part) => {
+            return part?.text ?? "";
+          }
+        )
+        .join("\n")
+        .trim();
+
+      if (!prompt) {
+        throw new Error(
+          "Groq prompt is empty"
+        );
+      }
 
       const response =
-        await ai.models.generateContent({
-          model: MODEL,
+        await groq.chat.completions
+          .create({
+            model: MODEL,
 
-          contents,
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
 
-          config: {
             temperature:
-              generationConfig.temperature ??
+              generationConfig
+                .temperature ??
               0.35,
 
-            maxOutputTokens:
+            max_tokens: Math.min(
               generationConfig
                 .maxOutputTokens ??
-              8192,
+                8192,
+              32768
+            ),
 
-            responseMimeType:
-              generationConfig
-                .responseMimeType ??
-              "application/json",
-          },
-        });
+            response_format: {
+              type: "json_object",
+            },
+          });
 
       console.log(
-        "Gemini response received"
+        "Groq response received"
       );
 
       return response;
     } catch (error) {
       console.error(
-        `Gemini attempt ${
+        `Groq attempt ${
           attempt + 1
         } failed:`,
         error
@@ -110,8 +149,12 @@ async function callGeminiWithRetry(
 
       const retryable =
         status === 429 ||
+        status === 500 ||
+        status === 502 ||
         status === 503 ||
         status === "429" ||
+        status === "500" ||
+        status === "502" ||
         status === "503";
 
       if (
@@ -125,7 +168,7 @@ async function callGeminiWithRetry(
           ) * 2000;
 
         console.log(
-          `Gemini busy. Waiting ${
+          `Groq busy. Waiting ${
             waitTime / 1000
           } seconds`
         );
@@ -142,21 +185,23 @@ async function callGeminiWithRetry(
   }
 
   throw new Error(
-    "Gemini failed after retries"
+    "Groq failed after retries"
   );
 }
 
 
 // ======================================================
-// GET GEMINI RESPONSE TEXT
+// GET GROQ RESPONSE TEXT
 // ======================================================
 
-function getGeminiResponseText(
-  geminiData
+function getGroqResponseText(
+  groqData
 ) {
   try {
     const text =
-      geminiData?.text;
+      groqData
+        ?.choices?.[0]
+        ?.message?.content;
 
     if (
       typeof text === "string"
@@ -167,7 +212,7 @@ function getGeminiResponseText(
     return "";
   } catch (error) {
     console.error(
-      "Gemini response text error:",
+      "Groq response text error:",
       error
     );
 
@@ -175,17 +220,24 @@ function getGeminiResponseText(
   }
 }
 
+
 // ======================================================
-// PARSE GEMINI JSON
+// PARSE GROQ JSON
 // ======================================================
 
-function parseGeminiJson(
+function parseGroqJson(
   rawText
 ) {
   const cleanedText =
     rawText
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
+      .replace(
+        /```json/gi,
+        ""
+      )
+      .replace(
+        /```/g,
+        ""
+      )
       .trim();
 
   return JSON.parse(
@@ -198,22 +250,29 @@ function parseGeminiJson(
 // HOME API
 // ======================================================
 
-app.get("/", (req, res) => {
-  return res.status(200).json({
-    success: true,
+app.get(
+  "/",
+  (req, res) => {
+    return res
+      .status(200)
+      .json({
+        success: true,
 
-    message:
-      "FuturePath AI Backend is running",
+        message:
+          "FuturePath AI Backend is running",
 
-    model: MODEL,
+        model: MODEL,
 
-    services: [
-      "Career Analysis",
-      "Career Roadmap Generation",
-      "FuturePath AI Guide",
-    ],
-  });
-});
+        provider: "Groq",
+
+        services: [
+          "Career Analysis",
+          "Career Roadmap Generation",
+          "FuturePath AI Guide",
+        ],
+      });
+  }
+);
 
 
 // ======================================================
@@ -222,6 +281,7 @@ app.get("/", (req, res) => {
 
 app.post(
   "/api/analyze-career",
+
   async (req, res) => {
     try {
       console.log(
@@ -239,12 +299,14 @@ app.post(
         !profile ||
         typeof profile !== "object"
       ) {
-        return res.status(400).json({
-          success: false,
+        return res
+          .status(400)
+          .json({
+            success: false,
 
-          error:
-            "Profile data is required",
-        });
+            error:
+              "Profile data is required",
+          });
       }
 
 
@@ -485,7 +547,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // GEMINI REQUEST BODY
+      // GROQ REQUEST BODY
       // ==================================================
 
       const requestBody = {
@@ -502,9 +564,6 @@ The careerMatches array MUST contain exactly 5 objects.
         ],
 
         generationConfig: {
-          responseMimeType:
-            "application/json",
-
           temperature: 0.35,
 
           maxOutputTokens: 16384,
@@ -513,11 +572,11 @@ The careerMatches array MUST contain exactly 5 objects.
 
 
       // ==================================================
-      // CALL GEMINI
+      // CALL GROQ
       // ==================================================
 
-      const geminiData =
-        await callGeminiWithRetry(
+      const groqData =
+        await callGroqWithRetry(
           requestBody,
           3
         );
@@ -528,13 +587,13 @@ The careerMatches array MUST contain exactly 5 objects.
       // ==================================================
 
       const rawText =
-        getGeminiResponseText(
-          geminiData
+        getGroqResponseText(
+          groqData
         );
 
       if (!rawText) {
         throw new Error(
-          "Gemini returned empty career analysis"
+          "Groq returned empty career analysis"
         );
       }
 
@@ -551,7 +610,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
       try {
         analysis =
-          parseGeminiJson(
+          parseGroqJson(
             rawText
           );
       } catch (error) {
@@ -566,7 +625,7 @@ The careerMatches array MUST contain exactly 5 objects.
         );
 
         throw new Error(
-          "Gemini returned invalid career JSON"
+          "Groq returned invalid career JSON"
         );
       }
 
@@ -586,11 +645,15 @@ The careerMatches array MUST contain exactly 5 objects.
       }
 
       if (
-        analysis.careerMatches.length !== 5
+        analysis
+          .careerMatches
+          .length !== 5
       ) {
         throw new Error(
-          `Gemini returned ${
-            analysis.careerMatches.length
+          `Groq returned ${
+            analysis
+              .careerMatches
+              .length
           } careers instead of 5`
         );
       }
@@ -605,9 +668,11 @@ The careerMatches array MUST contain exactly 5 objects.
           (careerData) => {
             const rawCareerSkills =
               Array.isArray(
-                careerData.careerSkills
+                careerData
+                  .careerSkills
               )
-                ? careerData.careerSkills
+                ? careerData
+                    .careerSkills
                 : [];
 
             const careerSkills =
@@ -629,7 +694,8 @@ The careerMatches array MUST contain exactly 5 objects.
                       Math.max(
                         0,
                         Number(
-                          skillData.weight
+                          skillData
+                            .weight
                         ) || 0
                       );
 
@@ -696,13 +762,14 @@ The careerMatches array MUST contain exactly 5 objects.
                 ) => {
                   if (
                     index ===
-                    careerSkills.length - 1
+                    careerSkills.length -
+                      1
                   ) {
                     skillData.weight =
                       Math.max(
                         0,
                         100 -
-                        assignedWeight
+                          assignedWeight
                       );
 
                     return;
@@ -712,14 +779,16 @@ The careerMatches array MUST contain exactly 5 objects.
                     totalWeight > 0
                       ? Math.round(
                           (
-                            skillData.weight /
+                            skillData
+                              .weight /
                             totalWeight
                           ) *
-                          100
+                            100
                         )
                       : Math.floor(
                           100 /
-                          careerSkills.length
+                            careerSkills
+                              .length
                         );
 
                   skillData.weight =
@@ -749,7 +818,8 @@ The careerMatches array MUST contain exactly 5 objects.
                       ) => {
                         const contribution =
                           (
-                            skillData.weight *
+                            skillData
+                              .weight *
                             skillData
                               .currentProficiency
                           ) /
@@ -790,7 +860,10 @@ The careerMatches array MUST contain exactly 5 objects.
                     a.currentProficiency -
                     b.currentProficiency
                 )
-                .slice(0, 5)
+                .slice(
+                  0,
+                  5
+                )
                 .map(
                   (skillData) =>
                     skillData.skill
@@ -814,7 +887,10 @@ The careerMatches array MUST contain exactly 5 objects.
                     b.weight -
                     a.weight
                 )
-                .slice(0, 6)
+                .slice(
+                  0,
+                  6
+                )
                 .map(
                   (skillData) =>
                     skillData.skill
@@ -877,7 +953,10 @@ The careerMatches array MUST contain exactly 5 objects.
                       .trim()
                 )
                 .filter(Boolean)
-                .slice(0, 5)
+                .slice(
+                  0,
+                  5
+                )
             : [],
 
         careerSummary:
@@ -894,48 +973,57 @@ The careerMatches array MUST contain exactly 5 objects.
 
       console.log(
         "CAREERS:",
-        finalAnalysis.careerMatches.map(
-          (careerData) => ({
-            career:
-              careerData.career,
+        finalAnalysis
+          .careerMatches
+          .map(
+            (careerData) => ({
+              career:
+                careerData.career,
 
-            match:
-              careerData.matchPercentage,
+              match:
+                careerData
+                  .matchPercentage,
 
-            skills:
-              careerData
-                .careerSkills.length,
-          })
-        )
+              skills:
+                careerData
+                  .careerSkills
+                  .length,
+            })
+          )
       );
 
 
-      return res.status(200).json({
-        success: true,
+      return res
+        .status(200)
+        .json({
+          success: true,
 
-        analysis:
-          finalAnalysis,
-      });
+          analysis:
+            finalAnalysis,
+        });
     } catch (error) {
       console.error(
         "CAREER ANALYSIS ERROR:",
         error
       );
 
-      return res.status(500).json({
-        success: false,
+      return res
+        .status(500)
+        .json({
+          success: false,
 
-        error:
-          "Unable to analyze career",
+          error:
+            "Unable to analyze career",
 
-        details:
-          error instanceof Error
-            ? error.message
-            : "Unknown career analysis error",
-      });
+          details:
+            error instanceof Error
+              ? error.message
+              : "Unknown career analysis error",
+        });
     }
   }
 );
+
 
 // ======================================================
 // ROADMAP GENERATION API
@@ -943,6 +1031,7 @@ The careerMatches array MUST contain exactly 5 objects.
 
 app.post(
   "/api/generate-roadmap",
+
   async (req, res) => {
     try {
       const {
@@ -956,23 +1045,33 @@ app.post(
       } = req.body;
 
       const cleanCareer =
-        career?.toString().trim() || "";
+        career
+          ?.toString()
+          .trim() || "";
 
       const cleanDurationMonths =
         Math.round(
-          Number(durationMonths)
+          Number(
+            durationMonths
+          )
         );
+
 
       // ==================================================
       // VALIDATE CAREER
       // ==================================================
 
       if (!cleanCareer) {
-        return res.status(400).json({
-          success: false,
-          error: "Career is required",
-        });
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error:
+              "Career is required",
+          });
       }
+
 
       // ==================================================
       // VALIDATE DURATION
@@ -985,12 +1084,16 @@ app.post(
         cleanDurationMonths < 1 ||
         cleanDurationMonths > 120
       ) {
-        return res.status(400).json({
-          success: false,
-          error:
-            "Roadmap duration must be between 1 and 120 months",
-        });
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error:
+              "Roadmap duration must be between 1 and 120 months",
+          });
       }
+
 
       // ==================================================
       // VALIDATE SELECTED CAREER
@@ -1003,15 +1106,21 @@ app.post(
 
       if (
         selectedCareerName &&
-        selectedCareerName.toLowerCase() !==
-          cleanCareer.toLowerCase()
+        selectedCareerName
+          .toLowerCase() !==
+          cleanCareer
+            .toLowerCase()
       ) {
-        return res.status(400).json({
-          success: false,
-          error:
-            "Selected career does not match roadmap career",
-        });
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error:
+              "Selected career does not match roadmap career",
+          });
       }
+
 
       // ==================================================
       // CURRENT MATCH
@@ -1034,7 +1143,9 @@ app.post(
         );
 
       const remainingPercentage =
-        100 - currentMatchPercentage;
+        100 -
+        currentMatchPercentage;
+
 
       // ==================================================
       // CAREER SKILLS
@@ -1044,11 +1155,13 @@ app.post(
 
       if (
         Array.isArray(
-          selectedCareer.careerSkills
+          selectedCareer
+            .careerSkills
         )
       ) {
         careerSkills =
-          selectedCareer.careerSkills
+          selectedCareer
+            .careerSkills
             .filter(
               (skillData) =>
                 skillData &&
@@ -1099,6 +1212,7 @@ app.post(
             );
       }
 
+
       // ==================================================
       // FALLBACK SKILLS TO IMPROVE
       // ==================================================
@@ -1106,11 +1220,13 @@ app.post(
       if (
         careerSkills.length === 0 &&
         Array.isArray(
-          selectedCareer.skillsToImprove
+          selectedCareer
+            .skillsToImprove
         )
       ) {
         careerSkills =
-          selectedCareer.skillsToImprove
+          selectedCareer
+            .skillsToImprove
             .map(
               (skill) => ({
                 skill:
@@ -1131,13 +1247,15 @@ app.post(
             );
       }
 
+
       // ==================================================
       // ADD RECOMMENDED SKILLS
       // ==================================================
 
       const finalRecommendedSkills =
         Array.isArray(
-          selectedCareer.recommendedSkills
+          selectedCareer
+            .recommendedSkills
         )
           ? selectedCareer
               .recommendedSkills
@@ -1165,49 +1283,68 @@ app.post(
         if (!alreadyExists) {
           careerSkills.push({
             skill,
+
             weight: 1,
+
             currentProficiency: 0,
+
             completed: false,
           });
         }
       }
 
+
       // ==================================================
       // FINAL FALLBACK
       // ==================================================
 
-      if (careerSkills.length === 0) {
+      if (
+        careerSkills.length === 0
+      ) {
         careerSkills = [
           {
             skill:
               `${cleanCareer} Fundamentals`,
+
             weight: 25,
+
             currentProficiency: 0,
+
             completed: false,
           },
           {
             skill:
               `${cleanCareer} Core Concepts`,
+
             weight: 25,
+
             currentProficiency: 0,
+
             completed: false,
           },
           {
             skill:
               `${cleanCareer} Practical Skills`,
+
             weight: 25,
+
             currentProficiency: 0,
+
             completed: false,
           },
           {
             skill:
               `${cleanCareer} Advanced Skills`,
+
             weight: 25,
+
             currentProficiency: 0,
+
             completed: false,
           },
         ];
       }
+
 
       // ==================================================
       // UNIQUE CAREER SKILLS
@@ -1238,6 +1375,7 @@ app.post(
       careerSkills =
         uniqueCareerSkills;
 
+
       // ==================================================
       // REMAINING CAREER SKILLS
       // ==================================================
@@ -1246,18 +1384,24 @@ app.post(
         careerSkills.filter(
           (careerSkill) =>
             careerSkill
-              .currentProficiency < 100
+              .currentProficiency <
+            100
         );
 
       if (
-        remainingCareerSkills.length === 0
+        remainingCareerSkills
+          .length === 0
       ) {
-        return res.status(400).json({
-          success: false,
-          error:
-            "All required career skills are already completed",
-        });
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error:
+              "All required career skills are already completed",
+          });
       }
+
 
       console.log(
         "================================"
@@ -1303,6 +1447,7 @@ app.post(
       console.log(
         "================================"
       );
+
 
       // ==================================================
       // ROADMAP PROMPT
@@ -1589,65 +1734,68 @@ ${cleanDurationMonths} objects.
 Return ONLY valid JSON.
 `;
 
+
       // ==================================================
-      // GEMINI REQUEST
+      // GROQ REQUEST
       // ==================================================
 
       const roadmapRequestBody = {
         contents: [
           {
             role: "user",
+
             parts: [
               {
-                text: roadmapPrompt,
+                text:
+                  roadmapPrompt,
               },
             ],
           },
         ],
 
         generationConfig: {
-          responseMimeType:
-            "application/json",
-
           temperature: 0.25,
 
-          maxOutputTokens: 65536,
+          maxOutputTokens: 32768,
         },
       };
 
+
       // ==================================================
-      // CALL GEMINI
+      // CALL GROQ
       // ==================================================
 
-      const geminiData =
-        await callGeminiWithRetry(
+      const groqData =
+        await callGroqWithRetry(
           roadmapRequestBody,
           3
         );
+
 
       // ==================================================
       // GET RESPONSE
       // ==================================================
 
       const rawText =
-        getGeminiResponseText(
-          geminiData
+        getGroqResponseText(
+          groqData
         );
 
       if (!rawText) {
         console.error(
           "EMPTY ROADMAP RESPONSE:",
           JSON.stringify(
-            geminiData,
+            groqData,
             null,
             2
           )
         );
 
         throw new Error(
-          "Gemini returned empty roadmap response"
+          "Groq returned empty roadmap response"
         );
       }
+
 
       // ==================================================
       // PARSE ROADMAP
@@ -1657,7 +1805,7 @@ Return ONLY valid JSON.
 
       try {
         roadmap =
-          parseGeminiJson(
+          parseGroqJson(
             rawText
           );
       } catch (error) {
@@ -1672,9 +1820,10 @@ Return ONLY valid JSON.
         );
 
         throw new Error(
-          "Gemini returned invalid roadmap JSON"
+          "Groq returned invalid roadmap JSON"
         );
       }
+
 
       // ==================================================
       // VALIDATE ROADMAP
@@ -1704,9 +1853,14 @@ Return ONLY valid JSON.
         cleanDurationMonths
       ) {
         throw new Error(
-          `Gemini returned ${roadmap.months.length} months instead of ${cleanDurationMonths}`
+          `Groq returned ${
+            roadmap.months.length
+          } months instead of ${
+            cleanDurationMonths
+          }`
         );
       }
+
 
       // ==================================================
       // VALID CAREER SKILLS
@@ -1724,6 +1878,7 @@ Return ONLY valid JSON.
           )
         );
 
+
       // ==================================================
       // CLEAN MONTHS
       // ==================================================
@@ -1740,7 +1895,9 @@ Return ONLY valid JSON.
               )
                 ? month.skills
                     .map(
-                      (skillData) => {
+                      (
+                        skillData
+                      ) => {
                         if (
                           !skillData ||
                           typeof skillData !==
@@ -1755,7 +1912,8 @@ Return ONLY valid JSON.
                             .trim() || "";
 
                         const rawCareerSkill =
-                          skillData.careerSkill
+                          skillData
+                            .careerSkill
                             ?.toString()
                             .trim() || "";
 
@@ -1774,12 +1932,16 @@ Return ONLY valid JSON.
 
                         return {
                           topic,
+
                           careerSkill,
                         };
                       }
                     )
                     .filter(Boolean)
-                    .slice(0, 5)
+                    .slice(
+                      0,
+                      5
+                    )
                 : [];
 
             return {
@@ -1813,7 +1975,10 @@ Return ONLY valid JSON.
                             .trim()
                       )
                       .filter(Boolean)
-                      .slice(0, 5)
+                      .slice(
+                        0,
+                        5
+                      )
                   : [],
 
               projects:
@@ -1828,7 +1993,10 @@ Return ONLY valid JSON.
                             .trim()
                       )
                       .filter(Boolean)
-                      .slice(0, 2)
+                      .slice(
+                        0,
+                        2
+                      )
                   : [],
 
               completedSkills: [],
@@ -1839,6 +2007,7 @@ Return ONLY valid JSON.
             };
           }
         );
+
 
       // ==================================================
       // CHECK CAREER SKILL COVERAGE
@@ -1886,6 +2055,7 @@ Return ONLY valid JSON.
         )
       );
 
+
       // ==================================================
       // FORCE MISSING SKILLS INTO ROADMAP
       // ==================================================
@@ -1897,7 +2067,9 @@ Return ONLY valid JSON.
         index++
       ) {
         const missingSkill =
-          missingCareerSkills[index];
+          missingCareerSkills[
+            index
+          ];
 
         const targetMonthIndex =
           index %
@@ -1917,17 +2089,20 @@ Return ONLY valid JSON.
         };
 
         if (
-          targetMonth.skills.length < 5
+          targetMonth.skills.length <
+          5
         ) {
           targetMonth.skills.push(
             forcedTopic
           );
         } else {
           targetMonth.skills[
-            targetMonth.skills.length - 1
+            targetMonth.skills.length -
+              1
           ] = forcedTopic;
         }
       }
+
 
       // ==================================================
       // FINAL COVERAGE VALIDATION
@@ -1964,14 +2139,17 @@ Return ONLY valid JSON.
         finalMissingSkills.length > 0
       ) {
         throw new Error(
-          `Roadmap does not cover career skills: ${finalMissingSkills
-            .map(
-              (skillData) =>
-                skillData.skill
-            )
-            .join(", ")}`
+          `Roadmap does not cover career skills: ${
+            finalMissingSkills
+              .map(
+                (skillData) =>
+                  skillData.skill
+              )
+              .join(", ")
+          }`
         );
       }
+
 
       // ==================================================
       // FINAL ROADMAP
@@ -2001,6 +2179,7 @@ Return ONLY valid JSON.
       roadmap.generatedAt =
         new Date().toISOString();
 
+
       console.log(
         "================================"
       );
@@ -2017,12 +2196,14 @@ Return ONLY valid JSON.
 
       console.log(
         "SOURCE MATCH:",
-        roadmap.sourceMatchPercentage
+        roadmap
+          .sourceMatchPercentage
       );
 
       console.log(
         "REMAINING GAP:",
-        roadmap.remainingPercentage
+        roadmap
+          .remainingPercentage
       );
 
       console.log(
@@ -2038,30 +2219,37 @@ Return ONLY valid JSON.
         "================================"
       );
 
-      return res.status(200).json({
-        success: true,
-        roadmap,
-      });
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          roadmap,
+        });
     } catch (error) {
       console.error(
         "ROADMAP ERROR:",
         error
       );
 
-      return res.status(500).json({
-        success: false,
+      return res
+        .status(500)
+        .json({
+          success: false,
 
-        error:
-          "Unable to generate career roadmap",
+          error:
+            "Unable to generate career roadmap",
 
-        details:
-          error instanceof Error
-            ? error.message
-            : "Unknown roadmap error",
-      });
+          details:
+            error instanceof Error
+              ? error.message
+              : "Unknown roadmap error",
+        });
     }
   }
 );
+
 
 // ======================================================
 // FUTUREPATH AI GUIDE CHAT API
@@ -2069,6 +2257,7 @@ Return ONLY valid JSON.
 
 app.post(
   "/api/chat",
+
   async (req, res) => {
     try {
       const {
@@ -2088,12 +2277,14 @@ app.post(
           .trim();
 
       if (!cleanMessage) {
-        return res.status(400).json({
-          success: false,
+        return res
+          .status(400)
+          .json({
+            success: false,
 
-          message:
-            "Message is required",
-        });
+            message:
+              "Message is required",
+          });
       }
 
 
@@ -2262,7 +2453,7 @@ Return exactly 3 suggestedQuestions.
 
 
       // ==================================================
-      // GEMINI REQUEST
+      // GROQ REQUEST
       // ==================================================
 
       const requestBody = {
@@ -2279,9 +2470,6 @@ Return exactly 3 suggestedQuestions.
         ],
 
         generationConfig: {
-          responseMimeType:
-            "application/json",
-
           temperature: 0.8,
 
           maxOutputTokens: 2048,
@@ -2290,11 +2478,11 @@ Return exactly 3 suggestedQuestions.
 
 
       // ==================================================
-      // CALL GEMINI
+      // CALL GROQ
       // ==================================================
 
-      const geminiData =
-        await callGeminiWithRetry(
+      const groqData =
+        await callGroqWithRetry(
           requestBody,
           3
         );
@@ -2305,13 +2493,13 @@ Return exactly 3 suggestedQuestions.
       // ==================================================
 
       const rawText =
-        getGeminiResponseText(
-          geminiData
+        getGroqResponseText(
+          groqData
         );
 
       if (!rawText) {
         throw new Error(
-          "Gemini returned empty chat response"
+          "Groq returned empty chat response"
         );
       }
 
@@ -2324,7 +2512,7 @@ Return exactly 3 suggestedQuestions.
 
       try {
         chatResult =
-          parseGeminiJson(
+          parseGroqJson(
             rawText
           );
       } catch (error) {
@@ -2339,7 +2527,7 @@ Return exactly 3 suggestedQuestions.
         );
 
         throw new Error(
-          "Gemini returned invalid chat JSON"
+          "Groq returned invalid chat JSON"
         );
       }
 
@@ -2355,7 +2543,8 @@ Return exactly 3 suggestedQuestions.
 
       const suggestedQuestions =
         Array.isArray(
-          chatResult.suggestedQuestions
+          chatResult
+            .suggestedQuestions
         )
           ? chatResult
               .suggestedQuestions
@@ -2366,9 +2555,11 @@ Return exactly 3 suggestedQuestions.
                     .trim()
               )
               .filter(Boolean)
-              .slice(0, 3)
+              .slice(
+                0,
+                3
+              )
           : [];
-
 
       if (!answer) {
         throw new Error(
@@ -2377,30 +2568,34 @@ Return exactly 3 suggestedQuestions.
       }
 
 
-      return res.status(200).json({
-        success: true,
+      return res
+        .status(200)
+        .json({
+          success: true,
 
-        answer,
+          answer,
 
-        suggestedQuestions,
-      });
+          suggestedQuestions,
+        });
     } catch (error) {
       console.error(
         "AI GUIDE ERROR:",
         error
       );
 
-      return res.status(500).json({
-        success: false,
+      return res
+        .status(500)
+        .json({
+          success: false,
 
-        message:
-          "Unable to get FuturePath AI response",
+          message:
+            "Unable to get FuturePath AI response",
 
-        details:
-          error instanceof Error
-            ? error.message
-            : "Unknown AI Guide error",
-      });
+          details:
+            error instanceof Error
+              ? error.message
+              : "Unknown AI Guide error",
+        });
     }
   }
 );
@@ -2410,14 +2605,18 @@ Return exactly 3 suggestedQuestions.
 // 404
 // ======================================================
 
-app.use((req, res) => {
-  return res.status(404).json({
-    success: false,
+app.use(
+  (req, res) => {
+    return res
+      .status(404)
+      .json({
+        success: false,
 
-    error:
-      "API route not found",
-  });
-});
+        error:
+          "API route not found",
+      });
+  }
+);
 
 
 // ======================================================
@@ -2430,6 +2629,7 @@ const PORT =
 app.listen(
   PORT,
   "0.0.0.0",
+
   () => {
     console.log(
       "================================"
@@ -2444,7 +2644,7 @@ app.listen(
     );
 
     console.log(
-      `Gemini Model: ${MODEL}`
+      `Groq Model: ${MODEL}`
     );
 
     console.log(
